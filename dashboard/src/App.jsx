@@ -41,6 +41,13 @@ const SK0=[
 ];
 const TK0=[{sym:"SOL",mint:"So11...112",pr:187.42,ch:4.2},{sym:"BONK",mint:"DezX...263",pr:0.0000234,ch:-2.1},{sym:"WIF",mint:"EKpQ...jm",pr:1.87,ch:12.4}];
 const AC0=[{id:"a1",nm:"ClawAgent",hd:"@ClawAgentAI",av:"🦀",on:true},{id:"a2",nm:"MoltBot Alpha",hd:"@MoltBotAlpha",av:"🧬",on:false}];
+const normAc=(a={})=>({
+  id:a.id||`a${Date.now()}`,
+  nm:a.nm??a.name??"",
+  hd:a.hd??a.handle??"",
+  av:a.av??a.avatar??"🤖",
+  on:typeof a.on==="boolean"?a.on:!!a.isActive,
+});
 
 export default function ClawDashboard() {
   const ws = useAgentSocket();
@@ -66,7 +73,7 @@ export default function ClawDashboard() {
   // ── WS event listeners ──
   useEffect(()=>{
     const u=[
-      ws.on("init",d=>{if(d.agentState)sAg(s=>({...s,...d.agentState}));if(d.accounts)sAc(d.accounts);lg_("🔌 Connected","o")}),
+      ws.on("init",d=>{if(d.agentState)sAg(s=>({...s,...d.agentState}));if(d.accounts){const aa=d.activeAccountId;sAc(d.accounts.map(x=>{const n=normAc(x);return {...n,on:aa?n.id===aa:n.on}}))}lg_("🔌 Connected","o")}),
       ws.on("agent:state",d=>sAg(s=>({...s,...d}))),
       ws.on("agent:started",d=>{sAg(s=>({...s,run:true,...d}));lg_("▶ Agent started","o")}),
       ws.on("agent:stopped",()=>{sAg(s=>({...s,run:false}));lg_("⏹ Stopped","w")}),
@@ -84,8 +91,8 @@ export default function ClawDashboard() {
       ws.on("skill:toggled",d=>lg_(`🔧 ${d.enabled?"ON":"OFF"}: ${d.skillId}`,d.enabled?"o":"w")),
       ws.on("token:added",d=>{sTk(p=>[...p,{sym:d.symbol||"???",mint:d.mint,pr:0,ch:0}]);lg_(`📌 +$${d.symbol}`,"o")}),
       ws.on("token:removed",d=>{sTk(p=>p.filter(t=>t.mint!==d.mint));lg_("🗑️ Token removed","w")}),
-      ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...a,on:a.id===d.accountId})));lg_("🔄 Account switched","o")}),
-      ws.on("account:added",d=>{sAc(p=>[...p,{id:d.id,nm:d.name,hd:d.handle,av:d.avatar||"🤖",on:false}]);lg_(`➕ ${d.name}`,"o")}),
+      ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...normAc(a),on:a.id===d.accountId})));lg_("🔄 Account switched","o")}),
+      ws.on("account:added",d=>{const na=normAc(d);sAc(p=>[...p,na]);lg_(`➕ ${na.nm||na.hd||"Account"}`,"o")}),
       ws.on("account:removed",d=>{sAc(p=>p.filter(a=>a.id!==d.accountId));lg_("🗑️ Account removed","w")}),
       ws.on("image:generated",d=>{sMP(p=>[...p,{t:"image",url:d.url}].slice(0,4));lg_("🖼️ Generated","o");sGn(false)}),
       ws.on("image:error",d=>{lg_(`❌ ImgGen: ${d.message}`,"w");sGn(false)}),
@@ -256,7 +263,7 @@ export default function ClawDashboard() {
         </div>}
 
         {tab==="accounts"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Cd ti="👤 ACCOUNTS">{ac.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:7,background:a.on?X.ag:X.b,border:`1px solid ${a.on?X.a+"55":X.bd}`,marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:"50%",background:a.on?`linear-gradient(135deg,${X.a},${X.as})`:X.s,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:`2px solid ${a.on?X.a:X.bd}`}}>{a.av}</div><div><div style={{fontSize:13,fontWeight:700}}>{a.nm}</div><div style={{fontSize:10,color:X.d}}>{a.hd}</div></div>{a.on&&<Tg c={X.g} bg={X.gd}>ACTIVE</Tg>}</div><div style={{display:"flex",gap:5}}>{!a.on&&<Bt on={()=>swAc(a)} c={X.a} sm>Switch</Bt>}<button onClick={()=>rmAc(a)} style={{padding:"4px 8px",borderRadius:3,border:`1px solid ${X.r}44`,background:X.rd,color:X.r,fontSize:8,cursor:"pointer",fontWeight:700}}>Remove</button></div></div>)}</Cd>
+          <Cd ti="👤 ACCOUNTS">{ac.map(a=>{const A=normAc(a);return <div key={A.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:7,background:A.on?X.ag:X.b,border:`1px solid ${A.on?X.a+"55":X.bd}`,marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:"50%",background:A.on?`linear-gradient(135deg,${X.a},${X.as})`:X.s,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:`2px solid ${A.on?X.a:X.bd}`}}>{A.av}</div><div><div style={{fontSize:13,fontWeight:700}}>{A.nm||"Unnamed account"}</div><div style={{fontSize:10,color:X.d}}>{A.hd||"@unknown"}</div></div>{A.on&&<Tg c={X.g} bg={X.gd}>ACTIVE</Tg>}</div><div style={{display:"flex",gap:5}}>{!A.on&&<Bt on={()=>swAc(A)} c={X.a} sm>Switch</Bt>}<button onClick={()=>rmAc(A)} style={{padding:"4px 8px",borderRadius:3,border:`1px solid ${X.r}44`,background:X.rd,color:X.r,fontSize:8,cursor:"pointer",fontWeight:700}}>Remove</button></div></div>})}</Cd>
           {!sAA?<div onClick={()=>sSAA(true)} style={{padding:12,borderRadius:7,border:`1px dashed ${X.bd}`,textAlign:"center",color:X.d,fontSize:11,cursor:"pointer"}}>+ Add Agent Account</div>
           :<Cd ti="➕ NEW ACCOUNT"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div><div style={{fontSize:7,color:X.d,marginBottom:2}}>AGENT NAME</div><input value={nAc.nm} onChange={e=>sNAc(p=>({...p,nm:e.target.value}))} placeholder="MyAgent" style={IS}/></div>
@@ -266,7 +273,7 @@ export default function ClawDashboard() {
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>ACCESS TOKEN</div><input value={nAc.at} onChange={e=>sNAc(p=>({...p,at:e.target.value}))} type="password" placeholder="Access Token" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>ACCESS TOKEN SECRET</div><input value={nAc.ats} onChange={e=>sNAc(p=>({...p,ats:e.target.value}))} type="password" placeholder="Access Token Secret" style={IS}/></div>
             <div style={{gridColumn:"1/-1"}}><div style={{fontSize:7,color:X.a,marginBottom:2}}>BEARER TOKEN</div><input value={nAc.bt} onChange={e=>sNAc(p=>({...p,bt:e.target.value}))} type="password" placeholder="Bearer Token" style={IS}/></div>
-          </div><div style={{marginTop:8,padding:"8px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,fontSize:8,color:X.d,lineHeight:1.6}}>💡 Get keys from <span style={{color:X.c,fontWeight:700}}>developer.twitter.com</span> → Create App → Keys & Tokens. Need <span style={{color:X.t}}>Read+Write</span>.</div><div style={{display:"flex",gap:6,marginTop:10}}><Bt on={addAc} dis={!nAc.nm||!nAc.hd||!nAc.ak} c={X.g}>✓ Create</Bt><Bt on={()=>sSAA(false)} gh>Cancel</Bt></div></Cd>}
+          </div><div style={{marginTop:8,padding:"8px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,fontSize:8,color:X.d,lineHeight:1.6}}>💡 Get keys from <span style={{color:X.c,fontWeight:700}}>developer.twitter.com</span> → Create App → Keys & Tokens. Need <span style={{color:X.t}}>Read+Write</span>.</div><div style={{display:"flex",gap:6,marginTop:10}}><Bt on={addAc} dis={!nAc.nm||!nAc.hd||!nAc.ak||!nAc.as||!nAc.at||!nAc.ats||!nAc.bt} c={X.g}>✓ Create</Bt><Bt on={()=>sSAA(false)} gh>Cancel</Bt></div></Cd>}
         </div>}
 
         {tab==="settings"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
