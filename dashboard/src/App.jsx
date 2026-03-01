@@ -691,6 +691,16 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <Cd ti="🖼️ IMAGE GENERATION">
               <div style={{fontSize:9,color:X.d,marginBottom:10}}>Image generation uses each user's own API key (never platform keys).</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr",gap:8,marginTop:8,marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Primary Provider</div>
+                  <select value={imgCfg.provider} onChange={e=>setImgCfg(s=>({...s,provider:e.target.value}))} style={IS}>
+                    <option value="openai">OpenAI</option>
+                    <option value="stability">Stability</option>
+                    <option value="replicate">Replicate</option>
+                  </select>
+                </div>
+              </div>
               {[{name:"OpenAI DALL-E 3",env:"openai",c:"#10a37f",desc:"Best quality, pay-per-use"},{name:"Stability AI",env:"stability",c:"#8b5cf6",desc:"Fast, open models"},{name:"Replicate FLUX",env:"replicate",c:"#f97316",desc:"Flexible, pay-per-use"}].map(p=>{
                 const typedValue = imgCfg.keys[p.env]?.trim() || "";
                 const savedValue = imgCfg.previews[p.env] || (imgCfg.configured[p.env] ? "Saved" : "None");
@@ -716,19 +726,6 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
                   </div>
                 </div>
               )})}
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr",gap:8,marginTop:8}}>
-                <div>
-                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Primary Provider</div>
-                  <select value={imgCfg.provider} onChange={e=>setImgCfg(s=>({...s,provider:e.target.value}))} style={IS}>
-                    <option value="openai">OpenAI</option>
-                    <option value="stability">Stability</option>
-                    <option value="replicate">Replicate</option>
-                  </select>
-                </div>
-                <div style={{display:"flex",alignItems:"end"}}>
-                  <div style={{fontSize:8,color:X.d}}>Add or edit each provider key directly in its card above.</div>
-                </div>
-              </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8}}>
                 <span style={{fontSize:9,color:X.d}}>Auto-attach images to posts</span>
                 <Tog on={sched.autoImage} ck={()=>setSched(s=>({...s,autoImage:!s.autoImage}))}/>
