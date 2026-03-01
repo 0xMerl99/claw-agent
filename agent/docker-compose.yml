@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  claw-agent:
+    build: .
+    container_name: claw-x-agent
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - agent-data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for persistent state
+  redis:
+    image: redis:alpine
+    container_name: claw-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  agent-data:
+  redis-data:

@@ -1,0 +1,53 @@
+# Full-stack deploy on Render.com
+# Agent = Web Service ($7/mo), Dashboard = Static Site (free)
+
+services:
+  # Agent Backend (WebSocket + REST)
+  - type: web
+    name: claw-agent
+    env: node
+    plan: starter
+    rootDir: agent
+    buildCommand: npm install && npx tsc
+    startCommand: node dist/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DASHBOARD_URL
+        sync: false
+      - key: TWITTER_API_KEY
+        sync: false
+      - key: TWITTER_API_SECRET
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN_SECRET
+        sync: false
+      - key: TWITTER_BEARER_TOKEN
+        sync: false
+      - key: SOLANA_RPC_URL
+        sync: false
+      # Image gen — set all you have, auto-detects
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: STABILITY_API_KEY
+        sync: false
+      - key: REPLICATE_API_TOKEN
+        sync: false
+
+  # Dashboard Frontend (Static)
+  - type: web
+    name: claw-dashboard
+    env: static
+    plan: free
+    rootDir: dashboard
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_WS_URL
+        sync: false
+      - key: VITE_API_URL
+        sync: false
