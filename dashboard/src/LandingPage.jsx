@@ -21,7 +21,6 @@ export default function LandingPage() {
             <li>Add multiple X accounts for free after first payment.</li>
             <li>Run one AI agent per user dashboard at a time.</li>
             <li>Plan pricing: Free (0), Starter (0.3 SOL), Influencer (0.5 SOL), Celebrity (1 SOL).</li>
-            <li>Mandatory platform fee: 10% of paid plan amount must go to EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2.</li>
             <li>Admin dashboard route: /admin (approved admin wallets bypass payments).</li>
           </ul>
         </div>

@@ -31,7 +31,6 @@ export default function DocsPage() {
             <li>Influencer: 0.5 SOL, up to 50 posts/day</li>
             <li>Celebrity: 1 SOL, up to 100 posts/day</li>
           </ul>
-          <p style={{ color: '#9aa0bb' }}>Mandatory platform fee: 10% of each paid plan must be transferred to EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2. Upgrade verification enforces this rule.</p>
         </section>
 
         <section>

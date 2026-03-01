@@ -48,8 +48,6 @@ Set these in the Render dashboard:
      - Starter: `0.3 SOL`
      - Influencer: `0.5 SOL`
      - Celebrity: `1 SOL`
-- Mandatory platform fee: `10%` of paid plan amount to:
-     - `EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2`
 - Admin dashboard route:
      - `/admin`
      - works only for wallets in `CLAW_ADMIN_WALLETS` (plus platform wallet)

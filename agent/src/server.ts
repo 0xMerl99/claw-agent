@@ -53,7 +53,6 @@ const PLAN_PRICING_SOL: Record<Plan, number> = {
 };
 
 const FIRST_PAYMENT_SOL = 0.5;
-const PLATFORM_FEE_PERCENT = 0.1;
 const PLATFORM_FEE_WALLET = 'EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2';
 const ADMIN_WALLETS = new Set(
   [
@@ -192,16 +191,10 @@ function clampForPlan(plan: Plan, schedule: any) {
 
 function getSubscriptionPaymentDetails(plan: PaidPlan) {
   const planAmountSol = PLAN_PRICING_SOL[plan];
-  const platformFeeSol = +(planAmountSol * PLATFORM_FEE_PERCENT).toFixed(9);
-  const operatorShareSol = +(planAmountSol - platformFeeSol).toFixed(9);
 
   return {
     plan,
     planAmountSol,
-    platformFeePercent: PLATFORM_FEE_PERCENT,
-    platformFeeSol,
-    operatorShareSol,
-    platformFeeWallet: PLATFORM_FEE_WALLET,
   };
 }
 
@@ -226,8 +219,6 @@ function getStatePayload(user: UserSession) {
       plan: user.plan,
       limits: PLAN_LIMITS[user.plan],
       pricingSol: PLAN_PRICING_SOL,
-      platformFeePercent: PLATFORM_FEE_PERCENT,
-      platformFeeWallet: PLATFORM_FEE_WALLET,
       paidPlans: user.subscriptionPaymentTxs,
     },
     billing: {
@@ -378,10 +369,8 @@ async function verifySubscriptionPaymentTx(signature: string, payerWallet: strin
   if (!tx || tx.meta?.err) return false;
 
   const details = getSubscriptionPaymentDetails(plan);
-  const minPlatformLamports = Math.ceil(details.platformFeeSol * LAMPORTS_PER_SOL);
   const minTotalLamports = Math.ceil(details.planAmountSol * LAMPORTS_PER_SOL);
 
-  let platformLamports = 0;
   let totalOutboundLamports = 0;
 
   for (const ix of tx.transaction.message.instructions as any[]) {
@@ -398,12 +387,9 @@ async function verifySubscriptionPaymentTx(signature: string, payerWallet: strin
     if (destination !== payerWallet) {
       totalOutboundLamports += lamports;
     }
-    if (destination === PLATFORM_FEE_WALLET) {
-      platformLamports += lamports;
-    }
   }
 
-  return platformLamports >= minPlatformLamports && totalOutboundLamports >= minTotalLamports;
+  return totalOutboundLamports >= minTotalLamports;
 }
 
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -610,7 +596,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
             type: 'subscription:payment-required',
             data: {
               ...payment,
-              message: `Plan ${paidPlan} requires ${payment.planAmountSol} SOL total, including mandatory ${Math.round(payment.platformFeePercent * 100)}% (${payment.platformFeeSol} SOL) to ${payment.platformFeeWallet}.`,
+              message: `Plan ${paidPlan} requires ${payment.planAmountSol} SOL payment verification.`,
             },
           }));
           break;
@@ -872,8 +858,6 @@ app.get('/api/state', requireAuth, (req, res) => {
       plan: user.plan,
       limits: PLAN_LIMITS[user.plan],
       pricingSol: PLAN_PRICING_SOL,
-      platformFeePercent: PLATFORM_FEE_PERCENT,
-      platformFeeWallet: PLATFORM_FEE_WALLET,
       paidPlans: user.subscriptionPaymentTxs,
     },
     billing: {
@@ -901,7 +885,6 @@ app.get('/api/health', (_, res) => {
     users: users.size,
     runningAgents,
     feeWallet: PLATFORM_FEE_WALLET,
-    platformFeePercent: PLATFORM_FEE_PERCENT,
     pricingSol: PLAN_PRICING_SOL,
     oneTimeFirstAccountFeeSol: FIRST_PAYMENT_SOL,
   });

@@ -65,7 +65,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
   const [lg,sLg]=useState([]);
   const [cmdToast,sCmdToast]=useState("");
   const [issueBanner,sIssueBanner]=useState(null);
-  const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0.3,influencer:0.5,celebrity:1},platformFeePercent:0.1,platformFeeWallet:"EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2",paidPlans:{}});
+  const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0.3,influencer:0.5,celebrity:1},paidPlans:{}});
   const [billing,setBilling]=useState({firstPaymentRequired:false,paidOnce:false,amountSol:0.5,feeWallet:"",oneTimeOnly:true,reason:"",txSignature:null,isAdmin:!!adminMode});
   const [txSig,setTxSig]=useState("");
   const [subTxSig,setSubTxSig]=useState("");
@@ -338,7 +338,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
       return;
     }
     setPendingPlan(plan);
-    issue_(`Pay ${subscription.pricingSol?.[plan]||0} SOL and include mandatory ${Math.round((subscription.platformFeePercent||0.1)*100)}% fee to ${subscription.platformFeeWallet}. Then verify below.`,"warn");
+    issue_(`Pay ${subscription.pricingSol?.[plan]||0} SOL for ${plan} and verify the transaction below.`,"warn");
   };
 
   const verifySubscriptionPayment=async()=>{
@@ -495,7 +495,6 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
               <div style={{fontSize:8,color:X.d,marginBottom:6,letterSpacing:1.2}}>SUBSCRIPTION PLAN</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["free","starter","influencer","celebrity"].map((plan)=><button key={plan} onClick={()=>pickPlan(plan)} style={{padding:"5px 10px",borderRadius:4,border:`1px solid ${subscription.plan===plan?X.a:X.bd}`,background:subscription.plan===plan?X.ag:"transparent",color:subscription.plan===plan?X.a:X.d,fontFamily:"inherit",fontSize:9,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>{plan}</button>)}</div>
               <div style={{fontSize:8,color:X.d,marginTop:6}}>Pricing: Free 0 SOL · Starter {subscription.pricingSol?.starter ?? 0.3} SOL · Influencer {subscription.pricingSol?.influencer ?? 0.5} SOL · Celebrity {subscription.pricingSol?.celebrity ?? 1} SOL</div>
-              <div style={{fontSize:8,color:X.d,marginTop:4}}>Mandatory platform fee: {Math.round((subscription.platformFeePercent||0.1)*100)}% to {subscription.platformFeeWallet}</div>
               <div style={{fontSize:8,color:X.d,marginTop:6}}>Limits: {subscription.limits.maxPostsPerHour}/hr, {subscription.limits.maxPostsPerDay}/day</div>
               {!!pendingPlan&&pendingPlan!=="free"&&!isAdmin&&<div style={{marginTop:8,padding:8,borderRadius:5,background:X.yd,border:`1px solid ${X.y}66`,color:X.y}}>
                 <div style={{fontSize:8,marginBottom:5}}>Pending upgrade: <b>{pendingPlan}</b> ({subscription.pricingSol?.[pendingPlan]||0} SOL)</div>
