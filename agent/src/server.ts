@@ -288,6 +288,11 @@ function broadcastToUser(user: UserSession, type: string, data: any) {
 function getStatePayload(user: UserSession) {
   const active = getActiveAccount(user);
   const imageCfg = normalizeImageConfig(active?.config?.image);
+  const imageProvidersConfigured = {
+    openai: !!imageCfg.keys.openai,
+    stability: !!imageCfg.keys.stability,
+    replicate: !!imageCfg.keys.replicate,
+  };
   return {
     agentState: user.agent?.getState() || null,
     performance: user.agent?.getPerformance() || null,
@@ -296,6 +301,7 @@ function getStatePayload(user: UserSession) {
     activeAccountId: user.activeAccountId,
     schedule: active?.config?.schedule || null,
     imageProvider: imageCfg.provider || null,
+    imageProvidersConfigured,
     hasImageApiKey: !!imageCfg.keys[imageCfg.provider],
     skillStates: active?.skillStates || DEFAULT_SKILL_STATES,
     isRunning: user.agent?.getState()?.isRunning || false,
@@ -715,11 +721,19 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (msg.data.image) {
         const normalized = normalizeImageConfig(user.activeConfig.image);
         const provider = normalizeProvider(msg.data.image.provider || normalized.provider);
+
         const apiKeyRaw = msg.data.image.apiKey;
         const apiKey = typeof apiKeyRaw === 'string' ? apiKeyRaw.trim() : '';
-
         if (apiKey) {
           normalized.keys[provider] = apiKey;
+        }
+
+        const rawKeys = msg.data.image.keys;
+        if (rawKeys && typeof rawKeys === 'object') {
+          (['openai', 'stability', 'replicate'] as ImageProvider[]).forEach((name) => {
+            const value = String((rawKeys as any)[name] || '').trim();
+            if (value) normalized.keys[name] = value;
+          });
         }
 
         user.activeConfig.image = {
@@ -736,12 +750,18 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       persistUserSession(user);
 
       const normalizedImage = normalizeImageConfig(user.activeConfig.image);
+      const imageProvidersConfigured = {
+        openai: !!normalizedImage.keys.openai,
+        stability: !!normalizedImage.keys.stability,
+        replicate: !!normalizedImage.keys.replicate,
+      };
 
       broadcastToUser(user, 'config:updated', {
         ...msg.data,
         subscription: { plan: user.plan, limits },
         schedule: user.activeConfig.schedule,
         imageProvider: normalizedImage.provider,
+        imageProvidersConfigured,
         hasImageApiKey: !!normalizedImage.keys[normalizedImage.provider],
       });
       break;

@@ -71,10 +71,14 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [pe,sPe]=useState({tone:"hybrid",hm:.7,ag:.3,td:.6,ed:.4,sl:.6,cp:["wagmi","gm","stay clawed in"],tp:["solana","defi","memecoins","ai-agents"],av:["politics"],_c:"",_t:"",_a:""});
   const [sv,sSv]=useState(false);
   const [nM,sNM]=useState(""),[nS,sNS]=useState("");
-  const [sAA,sSAA]=useState(false),[nAc,sNAc]=useState({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:"",imgProvider:"openai",imgKey:""});
+  const [sAA,sSAA]=useState(false),[nAc,sNAc]=useState({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});
   const [sF,sSF]=useState("all"),[csn,sCsn]=useState("");
   const [sched,setSched]=useState({postsPerHour:3,maxPostsPerDay:50,replyDelay:30,quietStart:4,quietEnd:8,autoImage:false,evoInterval:60});
-  const [imgCfg,setImgCfg]=useState({provider:"openai",apiKey:"",hasStoredKey:false});
+  const [imgCfg,setImgCfg]=useState({
+    provider:"openai",
+    keys:{openai:"",stability:"",replicate:""},
+    configured:{openai:false,stability:false,replicate:false},
+  });
   const [lg,sLg]=useState([]);
   const [cmdToast,sCmdToast]=useState("");
   const [issueBanner,sIssueBanner]=useState(null);
@@ -251,7 +255,11 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         setImgCfg((prev)=>({
           ...prev,
           provider:d.imageProvider || prev.provider,
-          hasStoredKey:!!d.hasImageApiKey,
+          configured:{
+            openai:!!d?.imageProvidersConfigured?.openai,
+            stability:!!d?.imageProvidersConfigured?.stability,
+            replicate:!!d?.imageProvidersConfigured?.replicate,
+          },
         }));
         if(d.subscription) setSubscription(d.subscription);
         if(d.billing) setBilling(d.billing);
@@ -284,7 +292,11 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         setImgCfg((prev)=>({
           ...prev,
           provider:d.imageProvider || prev.provider,
-          hasStoredKey:!!d.hasImageApiKey,
+          configured:{
+            openai:!!d?.imageProvidersConfigured?.openai,
+            stability:!!d?.imageProvidersConfigured?.stability,
+            replicate:!!d?.imageProvidersConfigured?.replicate,
+          },
         }));
         if(d.subscription) setSubscription(d.subscription);
         if(d.billing) setBilling(d.billing);
@@ -350,8 +362,16 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         if(d?.schedule){
           setSched(s=>({...s,autoImage:!!d.schedule.autoImage}));
         }
-        if(d?.imageProvider){
-          setImgCfg(s=>({...s,provider:d.imageProvider,hasStoredKey:!!d.hasImageApiKey}));
+        if(d?.imageProvider || d?.imageProvidersConfigured){
+          setImgCfg(s=>({
+            ...s,
+            provider:d?.imageProvider || s.provider,
+            configured:{
+              openai:!!d?.imageProvidersConfigured?.openai,
+              stability:!!d?.imageProvidersConfigured?.stability,
+              replicate:!!d?.imageProvidersConfigured?.replicate,
+            },
+          }));
         }
         lg_("⚙️ Config synced","o");
       }),
@@ -412,8 +432,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
     lg_(`🔄 → ${a.nm}`,"o")};
 
   const addAc=()=>{if(!nAc.nm||!nAc.hd)return;
-    if(!sendOrWarn("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt,imageProvider:nAc.imgProvider,imageApiKey:nAc.imgKey}))return;
-    lg_(`➕ ${nAc.nm}`,"o");sNAc({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:"",imgProvider:"openai",imgKey:""});sSAA(false)};
+    if(!sendOrWarn("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt}))return;
+    lg_(`➕ ${nAc.nm}`,"o");sNAc({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});sSAA(false)};
 
   const verifyPayment=async()=>{
     if(isAdmin){
@@ -604,10 +624,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>API SECRET</div><input value={nAc.as} onChange={e=>sNAc(p=>({...p,as:e.target.value}))} type="password" placeholder="Twitter API Secret" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>ACCESS TOKEN</div><input value={nAc.at} onChange={e=>sNAc(p=>({...p,at:e.target.value}))} type="password" placeholder="Access Token" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>ACCESS TOKEN SECRET</div><input value={nAc.ats} onChange={e=>sNAc(p=>({...p,ats:e.target.value}))} type="password" placeholder="Access Token Secret" style={IS}/></div>
-            <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>IMAGE PROVIDER</div><select value={nAc.imgProvider} onChange={e=>sNAc(p=>({...p,imgProvider:e.target.value}))} style={IS}><option value="openai">OpenAI</option><option value="stability">Stability</option><option value="replicate">Replicate</option></select></div>
-            <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>IMAGE API KEY</div><input value={nAc.imgKey} onChange={e=>sNAc(p=>({...p,imgKey:e.target.value}))} type="password" placeholder="Your image provider API key" style={IS}/></div>
             <div style={{gridColumn:"1/-1"}}><div style={{fontSize:7,color:X.a,marginBottom:2}}>BEARER TOKEN</div><input value={nAc.bt} onChange={e=>sNAc(p=>({...p,bt:e.target.value}))} type="password" placeholder="Bearer Token" style={IS}/></div>
-          </div><div style={{marginTop:8,padding:"8px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,fontSize:8,color:X.d,lineHeight:1.6}}>💡 X keys: <span style={{color:X.c,fontWeight:700}}>developer.twitter.com</span> → Create App → Keys & Tokens (Read+Write).<br/>🖼️ Image key is optional here and only required if Auto Image is enabled.</div><div style={{display:"flex",gap:6,marginTop:10}}><Bt on={addAc} dis={!nAc.nm||!nAc.hd||!nAc.ak||!nAc.as||!nAc.at||!nAc.ats||!nAc.bt} c={X.g}>✓ Create</Bt><Bt on={()=>sSAA(false)} gh>Cancel</Bt></div></Cd>}
+          </div><div style={{marginTop:8,padding:"8px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,fontSize:8,color:X.d,lineHeight:1.6}}>💡 X keys: <span style={{color:X.c,fontWeight:700}}>developer.twitter.com</span> → Create App → Keys & Tokens (Read+Write).<br/>🖼️ Manage image provider keys in <span style={{color:X.t,fontWeight:700}}>Settings</span>.</div><div style={{display:"flex",gap:6,marginTop:10}}><Bt on={addAc} dis={!nAc.nm||!nAc.hd||!nAc.ak||!nAc.as||!nAc.at||!nAc.ats||!nAc.bt} c={X.g}>✓ Create</Bt><Bt on={()=>sSAA(false)} gh>Cancel</Bt></div></Cd>}
         </div>}
 
         {tab==="settings"&&<div style={{display:"grid",gridTemplateColumns:isTablet?"1fr":"1fr 1fr",gap:14}}>
@@ -665,9 +683,9 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
                   <div style={{fontSize:8,color:X.d}}>provider <span style={{color:X.t,fontWeight:600}}>{p.env}</span></div>
                 </div>
               ))}
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8,marginTop:8}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr",gap:8,marginTop:8}}>
                 <div>
-                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Provider</div>
+                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Primary Provider</div>
                   <select value={imgCfg.provider} onChange={e=>setImgCfg(s=>({...s,provider:e.target.value}))} style={IS}>
                     <option value="openai">OpenAI</option>
                     <option value="stability">Stability</option>
@@ -675,8 +693,21 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
                   </select>
                 </div>
                 <div>
-                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>API Key {imgCfg.hasStoredKey&&<span style={{color:X.g}}>(stored)</span>}</div>
-                  <input value={imgCfg.apiKey} onChange={e=>setImgCfg(s=>({...s,apiKey:e.target.value}))} type="password" placeholder={imgCfg.hasStoredKey?"Leave blank to keep current key":"Paste your API key"} style={IS}/>
+                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Provider Keys (add/edit all 3)</div>
+                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:6}}>
+                    <div>
+                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>OPENAI {imgCfg.configured.openai&&<span style={{color:X.g}}>(stored)</span>}</div>
+                      <input value={imgCfg.keys.openai} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,openai:e.target.value}}))} type="password" placeholder={imgCfg.configured.openai?"Leave blank to keep":"Paste key"} style={IS}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>STABILITY {imgCfg.configured.stability&&<span style={{color:X.g}}>(stored)</span>}</div>
+                      <input value={imgCfg.keys.stability} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,stability:e.target.value}}))} type="password" placeholder={imgCfg.configured.stability?"Leave blank to keep":"Paste key"} style={IS}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>REPLICATE {imgCfg.configured.replicate&&<span style={{color:X.g}}>(stored)</span>}</div>
+                      <input value={imgCfg.keys.replicate} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,replicate:e.target.value}}))} type="password" placeholder={imgCfg.configured.replicate?"Leave blank to keep":"Paste key"} style={IS}/>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8}}>
@@ -694,17 +725,34 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             </Cd>
             <Cd ti="💾 APPLY">
               <Bt on={()=>{
-                if(sched.autoImage && !imgCfg.hasStoredKey && !imgCfg.apiKey.trim()){
+                const hasStored = !!(imgCfg.configured.openai || imgCfg.configured.stability || imgCfg.configured.replicate);
+                const hasNew = !!(imgCfg.keys.openai.trim() || imgCfg.keys.stability.trim() || imgCfg.keys.replicate.trim());
+                if(sched.autoImage && !hasStored && !hasNew){
                   issue_("Image API key is required only when Auto Image is ON. Add your key or turn Auto Image OFF.","warn");
                   return;
                 }
                 const payload={
                   schedule:{postsPerHour:sched.postsPerHour,maxPostsPerDay:sched.maxPostsPerDay,replyDelayMs:sched.replyDelay*1000,quietHoursUTC:[sched.quietStart,sched.quietEnd],autoImage:sched.autoImage},
                   moltBot:{evolutionInterval:sched.evoInterval*60000},
-                  image: imgCfg.apiKey.trim() ? {provider:imgCfg.provider,apiKey:imgCfg.apiKey.trim()} : {provider:imgCfg.provider},
+                  image: {
+                    provider:imgCfg.provider,
+                    keys:{
+                      openai:imgCfg.keys.openai.trim(),
+                      stability:imgCfg.keys.stability.trim(),
+                      replicate:imgCfg.keys.replicate.trim(),
+                    },
+                  },
                 };
                 if(!sendOrWarn("config:update",payload))return;
-                setImgCfg(s=>({...s,apiKey:"",hasStoredKey:true}));
+                setImgCfg(s=>({
+                  ...s,
+                  keys:{openai:"",stability:"",replicate:""},
+                  configured:{
+                    openai:s.configured.openai || !!payload.image.keys.openai,
+                    stability:s.configured.stability || !!payload.image.keys.stability,
+                    replicate:s.configured.replicate || !!payload.image.keys.replicate,
+                  },
+                }));
                 lg_(`⚙️ Config: ${sched.postsPerHour}/hr, max ${sched.maxPostsPerDay}/day, quiet ${sched.quietStart}-${sched.quietEnd} UTC`,"o");
               }} c={X.a}>💾 SAVE SETTINGS</Bt>
               <div style={{marginTop:8,fontSize:8,color:X.d}}>Settings sync to agent in real-time via WebSocket</div>
