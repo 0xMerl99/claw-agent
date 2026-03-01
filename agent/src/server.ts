@@ -11,6 +11,7 @@ import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { ClawdBot } from './clawdbot';
 import { AgentConfig, DEFAULT_CONFIG } from './config';
 import { ImageGenerator } from './image-generator';
+import { listPersistedUsers, upsertPersistedUser, PersistedUserState } from './db';
 
 const nacl = require('tweetnacl');
 
@@ -18,7 +19,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-app.use(cors({ origin: process.env.DASHBOARD_URL || '*' }));
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 const upload = multer({
@@ -120,6 +121,54 @@ const challenges = new Map<string, AuthChallenge>();
 const tokens = new Map<string, AuthToken>();
 const imageGen = new ImageGenerator();
 
+function toPersistedUser(user: UserSession): PersistedUserState {
+  return {
+    wallet: user.wallet,
+    isAdmin: user.isAdmin,
+    plan: user.plan,
+    paidOnce: user.paidOnce,
+    firstPaymentTx: user.firstPaymentTx,
+    subscriptionPaymentTxs: user.subscriptionPaymentTxs,
+    accounts: user.accounts,
+    activeAccountId: user.activeAccountId,
+  };
+}
+
+function persistUserSession(user: UserSession): void {
+  upsertPersistedUser(toPersistedUser(user));
+}
+
+function bootstrapUsersFromDb(): void {
+  const persistedUsers = listPersistedUsers();
+  persistedUsers.forEach((persisted) => {
+    const isAdmin = ADMIN_WALLETS.has(persisted.wallet);
+    const accounts = Array.isArray(persisted.accounts) ? persisted.accounts : [];
+    const activeAccountId = persisted.activeAccountId && accounts.some((a) => a.id === persisted.activeAccountId)
+      ? persisted.activeAccountId
+      : null;
+    const activeAccount = activeAccountId ? accounts.find((a) => a.id === activeAccountId) : undefined;
+
+    const session: UserSession = {
+      wallet: persisted.wallet,
+      isAdmin,
+      plan: persisted.plan || 'free',
+      paidOnce: isAdmin ? true : !!persisted.paidOnce,
+      firstPaymentTx: isAdmin ? (persisted.firstPaymentTx || 'admin-bypass') : (persisted.firstPaymentTx || null),
+      subscriptionPaymentTxs: persisted.subscriptionPaymentTxs || {},
+      accounts,
+      activeAccountId,
+      activeConfig: activeAccount?.config || null,
+      agent: null,
+      clients: new Set<WebSocket>(),
+      stateBroadcastInterval: null,
+    };
+
+    users.set(session.wallet, session);
+  });
+}
+
+bootstrapUsersFromDb();
+
 function sanitizeAccount(account: AgentAccount) {
   return {
     id: account.id,
@@ -153,6 +202,7 @@ function getOrCreateUser(wallet: string): UserSession {
   };
 
   users.set(wallet, user);
+  persistUserSession(user);
   return user;
 }
 
@@ -301,6 +351,7 @@ async function switchAccount(user: UserSession, accountId: string | null): Promi
   if (!accountId) {
     user.activeAccountId = null;
     user.activeConfig = null;
+    persistUserSession(user);
     return true;
   }
 
@@ -310,6 +361,7 @@ async function switchAccount(user: UserSession, accountId: string | null): Promi
   account.isActive = true;
   user.activeAccountId = accountId;
   user.activeConfig = account.config;
+  persistUserSession(user);
   return true;
 }
 
@@ -453,6 +505,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (!user.activeConfig) break;
       user.activeConfig.identity.personality = { ...user.activeConfig.identity.personality, ...msg.data };
       if (user.agent) user.agent.updatePersonality(msg.data);
+      persistUserSession(user);
       broadcastToUser(user, 'personality:updated', msg.data);
       break;
     }
@@ -465,6 +518,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (user.agent) {
         user.agent.toggleSkill(msg.data.skillId, msg.data.enabled);
       }
+      persistUserSession(user);
       broadcastToUser(user, 'skill:toggled', { ...msg.data, skillStates: active?.skillStates || DEFAULT_SKILL_STATES });
       break;
     }
@@ -483,6 +537,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
         user.activeConfig.solana.targetTokens.push(msg.data.mint);
       }
       if (user.agent) await user.agent.addToken(msg.data.mint);
+      persistUserSession(user);
       broadcastToUser(user, 'token:added', msg.data);
       break;
     }
@@ -491,6 +546,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (!user.activeConfig) break;
       user.activeConfig.solana.targetTokens = user.activeConfig.solana.targetTokens.filter((t) => t !== msg.data.mint);
       if (user.agent) user.agent.removeToken(msg.data.mint);
+      persistUserSession(user);
       broadcastToUser(user, 'token:removed', msg.data);
       break;
     }
@@ -534,6 +590,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
 
       const account = createAccount(msg.data, user.plan);
       user.accounts.push(account);
+      persistUserSession(user);
       broadcastToUser(user, 'account:added', sanitizeAccount(account));
       break;
     }
@@ -543,6 +600,7 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (user.activeAccountId === msg.data.accountId) {
         await switchAccount(user, user.accounts[0]?.id || null);
       }
+      persistUserSession(user);
       broadcastToUser(user, 'account:removed', msg.data);
       break;
     }
@@ -572,6 +630,8 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (msg.data.moltBot) {
         Object.assign(user.activeConfig.moltBot, msg.data.moltBot);
       }
+
+      persistUserSession(user);
 
       broadcastToUser(user, 'config:updated', {
         ...msg.data,
@@ -612,6 +672,8 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (user.activeConfig) {
         user.activeConfig.schedule = clampForPlan(plan, user.activeConfig.schedule);
       }
+
+      persistUserSession(user);
 
       broadcastToUser(user, 'subscription:updated', {
         plan: user.plan,
@@ -741,6 +803,7 @@ app.post('/api/billing/verify-first-payment', requireAuth, async (req, res) => {
   if (user.isAdmin) {
     user.paidOnce = true;
     user.firstPaymentTx = 'admin-bypass';
+    persistUserSession(user);
     res.json({ ok: true, paidOnce: true, txSignature: 'admin-bypass', oneTimeOnly: true, isAdmin: true });
     return;
   }
@@ -771,6 +834,7 @@ app.post('/api/billing/verify-first-payment', requireAuth, async (req, res) => {
 
     user.paidOnce = true;
     user.firstPaymentTx = txSignature;
+    persistUserSession(user);
 
     res.json({ ok: true, paidOnce: true, txSignature, oneTimeOnly: true, message: 'Payment verified. You can now add your first AI agent account. Future account additions are free.' });
   } catch (error) {
@@ -793,6 +857,7 @@ app.post('/api/billing/verify-subscription-payment', requireAuth, async (req, re
   if (user.isAdmin) {
     if (plan !== 'free') {
       user.subscriptionPaymentTxs[plan as PaidPlan] = 'admin-bypass';
+      persistUserSession(user);
     }
     res.json({ ok: true, plan, txSignature: 'admin-bypass', isAdmin: true });
     return;
@@ -829,6 +894,7 @@ app.post('/api/billing/verify-subscription-payment', requireAuth, async (req, re
     }
 
     user.subscriptionPaymentTxs[paidPlan] = txSignature;
+    persistUserSession(user);
 
     res.json({ ok: true, plan: paidPlan, txSignature, payment });
   } catch (error) {

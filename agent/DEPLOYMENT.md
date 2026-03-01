@@ -34,6 +34,7 @@ Set these in the Render dashboard:
      - `DASHBOARD_URL` = dashboard URL (e.g. `https://claw-dashboard.onrender.com`)
      - `SOLANA_RPC_URL`
      - `CLAW_ADMIN_WALLETS` (comma-separated wallet addresses allowed to use `/admin` with payment bypass)
+     - `CLAW_DB_FILE` (recommended: `/var/data/claw-db.json`)
      - `OPENAI_API_KEY` and/or `STABILITY_API_KEY` and/or `REPLICATE_API_TOKEN`
 
 - Dashboard `claw-dashboard`:
@@ -51,6 +52,12 @@ Set these in the Render dashboard:
 - Admin dashboard route:
      - `/admin`
      - works only for wallets in `CLAW_ADMIN_WALLETS` (plus platform wallet)
+
+## 4. Persistence (DB)
+
+- Backend now uses a lightweight file database (`lowdb`) for users, accounts, plan state, and payment verification records.
+- On Render, persist it on attached disk via:
+     - `CLAW_DB_FILE=/var/data/claw-db.json`
 
 ## 4. Legacy Manual Service Setup (Optional)
 

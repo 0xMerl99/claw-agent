@@ -11,9 +11,15 @@ services:
     buildCommand: npm install
     startCommand: npx tsx src/server.ts
     healthCheckPath: /api/health
+    disks:
+      - name: claw-agent-data
+        mountPath: /var/data
+        sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
+      - key: CLAW_DB_FILE
+        value: /var/data/claw-db.json
       - key: DASHBOARD_URL
         sync: false
       - key: TWITTER_API_KEY

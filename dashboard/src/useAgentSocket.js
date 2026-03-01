@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/ws';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+function inferApiUrl() {
+  if (typeof window === 'undefined') return 'http://localhost:3001';
+
+  const { hostname, protocol, origin } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:3001';
+  if (hostname.includes('claw-dashboard')) {
+    return `${protocol}//${hostname.replace('claw-dashboard', 'claw-agent')}`;
+  }
+
+  return origin;
+}
+
+const API_URL = (import.meta.env.VITE_API_URL || inferApiUrl()).replace(/\/$/, '');
+const WS_URL = import.meta.env.VITE_WS_URL || `${API_URL.replace(/^http/i, 'ws')}/ws`;
 
 export { API_URL };
 
