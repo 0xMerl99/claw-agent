@@ -500,7 +500,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const TABS=[{id:"overview",i:"📊"},{id:"compose",i:"✏️"},{id:"personality",i:"🎭"},{id:"skills",i:"🔧"},{id:"tokens",i:"💰"},{id:"accounts",i:"👤"},{id:"settings",i:"⚙️"},{id:"evolution",i:"🧬"},{id:"feed",i:"📡"}];
 
   return (
-    <div style={{background:X.b,color:X.t,height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:isMobile?1:1.25}}>
+    <div style={{background:X.b,color:X.t,height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'JetBrains Mono','Fira Code',monospace",fontSize:isMobile?13:14}}>
       {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
       {showConnectModal&&<div style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowConnectModal(false)}>
         <div style={{width:"100%",maxWidth:460,border:`1px solid ${X.bd}`,borderRadius:10,background:X.s,padding:18}} onClick={(e)=>e.stopPropagation()}>
@@ -541,7 +541,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         </div>
       </header>
 
-      <main style={{flex:1,maxWidth:1840,width:"100%",margin:"0 auto",padding:isMobile?"12px 12px 130px":"14px 20px 95px",position:"relative",overflowY:"auto",overflowX:"hidden"}}>
+      <main style={{flex:1,minHeight:0,maxWidth:1840,width:"100%",margin:"0 auto",padding:isMobile?"12px 12px 130px":"14px 20px 95px",position:"relative",overflowY:"auto",overflowX:"hidden"}}>
         {!walletConnected&&<button onClick={()=>setShowConnectModal(true)} style={{position:"absolute",inset:0,zIndex:20,border:"none",background:"transparent",cursor:"not-allowed"}} aria-label="Connect wallet to unlock dashboard" />}
 
         {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -778,7 +778,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </button>
         </div>
       </footer>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');*{box-sizing:border-box;margin:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#08090d}::-webkit-scrollbar-thumb{background:#1c1e30;border-radius:2px}textarea::placeholder,input::placeholder{color:#33354a}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');html,body,#root{height:100%;overflow:hidden}*{box-sizing:border-box;margin:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#08090d}::-webkit-scrollbar-thumb{background:#1c1e30;border-radius:2px}textarea::placeholder,input::placeholder{color:#33354a}`}</style>
     </div>
   );
 }
