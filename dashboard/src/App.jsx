@@ -45,9 +45,11 @@ const normAc=(a={})=>({
   on:typeof a.on==="boolean"?a.on:!!a.isActive,
 });
 
-export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
+export default function ClawDashboard({ token, wallet, onLogout, adminMode, onConnectWallet, connectingWallet = false, connectError = "" }) {
   const ws = useAgentSocket(token);
   const live = ws.connected;
+  const walletConnected = !!token && !!wallet;
+  const [showConnectModal,setShowConnectModal]=useState(false);
 
   const [ag,sAg]=useState({run:false,cy:0,pt:0,rt:0,fl:0,fd:0,er:0,gn:0});
   const [eD,sED]=useState([]),[vD,sVD]=useState([]),[wt,sWt]=useState(EMPTY_WT);
@@ -75,7 +77,13 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
   const cmd_=(m)=>{sCmdToast(m);setTimeout(()=>sCmdToast(""),2200)};
   const issue_=(text,tone="warn")=>sIssueBanner({text,tone});
   const isAdmin = !!billing?.isAdmin || !!adminMode;
+  const guardWallet=()=>{
+    if(walletConnected) return true;
+    setShowConnectModal(true);
+    return false;
+  };
   const sendOrWarn=(type,data={})=>{
+    if(!guardWallet()) return false;
     const ok = ws.send(type,data);
     cmd_(ok?`Sent ${type}`:`Failed ${type}`);
     if(!ok)lg_("⚠️ Backend not connected","w");
@@ -382,6 +390,17 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
   return (
     <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:1.15}}>
       {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
+      {showConnectModal&&<div style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowConnectModal(false)}>
+        <div style={{width:"100%",maxWidth:460,border:`1px solid ${X.bd}`,borderRadius:10,background:X.s,padding:18}} onClick={(e)=>e.stopPropagation()}>
+          <h3 style={{margin:0,marginBottom:8,color:X.a,fontSize:18}}>{adminMode?"Connect Admin Wallet":"Connect Wallet"}</h3>
+          <p style={{marginTop:0,color:X.d,lineHeight:1.6,fontSize:12}}>{adminMode?"Connect your approved admin wallet to unlock dashboard controls.":"Please connect your wallet first to unlock dashboard tabs and actions."}</p>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <Bt on={()=>setShowConnectModal(false)} gh sm>Close</Bt>
+            <Bt on={onConnectWallet} c={X.a} sm dis={connectingWallet}>{connectingWallet?"Connecting...":"Connect Wallet"}</Bt>
+          </div>
+          {connectError&&<div style={{marginTop:10,color:X.y,fontSize:11,whiteSpace:"pre-wrap"}}>{connectError}</div>}
+        </div>
+      </div>}
       {issueBanner&&<div style={{position:"fixed",top:40,right:12,zIndex:999,padding:"8px 10px",borderRadius:6,background:X.s,border:`1px solid ${X.y}66`,color:X.y,fontSize:11,fontWeight:700,maxWidth:520,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1}}>{issueBanner.text}</span><button onClick={()=>sIssueBanner(null)} style={{border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:4,fontSize:10,padding:"2px 6px",cursor:"pointer"}}>x</button></div>}
       <header style={{position:"sticky",top:0,zIndex:50,background:`${X.b}f0`,borderBottom:`1px solid ${X.bd}`,backdropFilter:"blur(20px)"}}>
         <div style={{maxWidth:1840,margin:"0 auto",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
@@ -392,6 +411,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             {aA&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.bd}`,fontSize:9}}><span>{aA.av}</span><span style={{fontWeight:700}}>{aA.nm}</span><span style={{color:X.d}}>{aA.hd}</span></div>}
             {wallet&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,fontSize:9,color:X.d}}>{wallet.slice(0,4)}...{wallet.slice(-4)} {isAdmin&&<span style={{padding:"1px 6px",borderRadius:3,background:X.cd,color:X.c,fontSize:8,fontWeight:800}}>ADMIN</span>} <button onClick={()=>{clearAuth();onLogout?.();}} style={{marginLeft:6,border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:3,padding:"1px 5px",fontSize:8,cursor:"pointer"}}>Logout</button></div>}
+            {!walletConnected&&<Bt on={()=>setShowConnectModal(true)} c={X.a} sm>Connect Wallet</Bt>}
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:3,background:live?X.gd:X.yd}}>
               <div style={{width:5,height:5,borderRadius:"50%",background:live?X.g:X.y}}/>
               <span style={{fontSize:8,color:live?X.g:X.y,fontWeight:700}}>{live?"LIVE":"OFFLINE"}</span>
@@ -404,11 +424,12 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
           </div>
         </div>
         <div style={{maxWidth:1840,margin:"0 auto",padding:"0 20px",display:"flex",overflowX:"auto"}}>
-          {TABS.map(t=><button key={t.id} onClick={()=>sTab(t.id)} style={{padding:"7px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap",background:tab===t.id?X.ag:"transparent",color:tab===t.id?X.a:X.d,borderBottom:tab===t.id?`2px solid ${X.a}`:"2px solid transparent"}}>{t.i} {t.id}</button>)}
+          {TABS.map(t=><button key={t.id} onClick={()=>walletConnected?sTab(t.id):setShowConnectModal(true)} style={{padding:"7px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap",background:tab===t.id?X.ag:"transparent",color:tab===t.id?X.a:X.d,borderBottom:tab===t.id?`2px solid ${X.a}`:"2px solid transparent"}}>{t.i} {t.id}</button>)}
         </div>
       </header>
 
-      <main style={{maxWidth:1840,margin:"0 auto",padding:"14px 20px 50px"}}>
+      <main style={{maxWidth:1840,margin:"0 auto",padding:"14px 20px 50px",position:"relative"}}>
+        {!walletConnected&&<button onClick={()=>setShowConnectModal(true)} style={{position:"absolute",inset:0,zIndex:20,border:"none",background:"transparent",cursor:"not-allowed"}} aria-label="Connect wallet to unlock dashboard" />}
 
         {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:8}}>
