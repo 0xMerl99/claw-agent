@@ -17,7 +17,6 @@ export default function LandingPage() {
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 26, flexWrap: 'wrap' }}>
           <a href="/dashboard" style={{ padding: '11px 18px', borderRadius: 8, background: '#ff3d00', color: '#fff', textDecoration: 'none', fontWeight: 800 }}>Open Dashboard</a>
-          <a href="/admin" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #24465a', color: '#00e5ff', textDecoration: 'none', fontWeight: 700 }}>Open Admin</a>
           <a href="/docs" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#c2c5dd', textDecoration: 'none', fontWeight: 700 }}>Read Docs</a>
         </div>
 

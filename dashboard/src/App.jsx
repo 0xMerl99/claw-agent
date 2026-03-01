@@ -7,12 +7,19 @@ import {
 import { useAgentSocket, API_URL } from "./useAgentSocket";
 import { authFetch, clearAuth } from "./auth";
 
-const X = {
+const DARK_THEME = {
   b:"#08090d",s:"#101118",bd:"#1c1e30",a:"#ff3d00",as:"#ff6d3a",ag:"rgba(255,61,0,.12)",
   g:"#00e676",gd:"rgba(0,230,118,.1)",r:"#ff1744",rd:"rgba(255,23,68,.1)",
   y:"#ffd600",yd:"rgba(255,214,0,.08)",c:"#00e5ff",cd:"rgba(0,229,255,.08)",
   p:"#d500f9",t:"#e4e4ec",d:"#5f6280",m:"#33354a"
 };
+const LIGHT_THEME = {
+  b:"#f4f6fb",s:"#ffffff",bd:"#d9dfec",a:"#ff3d00",as:"#ff6d3a",ag:"rgba(255,61,0,.12)",
+  g:"#00a152",gd:"rgba(0,161,82,.12)",r:"#d5002f",rd:"rgba(213,0,47,.12)",
+  y:"#c49000",yd:"rgba(196,144,0,.12)",c:"#008aa3",cd:"rgba(0,138,163,.12)",
+  p:"#a900c7",t:"#1a1f2e",d:"#56607a",m:"#b3bdd2"
+};
+const X = { ...DARK_THEME };
 const ST = ["market-alpha","meme-post","engage-reply","shill","on-chain"];
 const SC = ["#ff3d00","#00e5ff","#d500f9","#ffd600","#00e676"];
 const IS = {width:"100%",padding:"8px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:11,outline:"none",boxSizing:"border-box"};
@@ -49,7 +56,9 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const ws = useAgentSocket(token);
   const live = ws.connected;
   const walletConnected = !!token && !!wallet;
+  const [theme,setTheme]=useState(()=>localStorage.getItem("claw_theme")==="light"?"light":"dark");
   const [showConnectModal,setShowConnectModal]=useState(false);
+  Object.assign(X, theme === "light" ? LIGHT_THEME : DARK_THEME);
 
   const [ag,sAg]=useState({run:false,cy:0,pt:0,rt:0,fl:0,fd:0,er:0,gn:0});
   const [eD,sED]=useState([]),[vD,sVD]=useState([]),[wt,sWt]=useState(EMPTY_WT);
@@ -68,15 +77,16 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [cmdToast,sCmdToast]=useState("");
   const [issueBanner,sIssueBanner]=useState(null);
   const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0.3,influencer:0.5,celebrity:1},paidPlans:{}});
-  const [billing,setBilling]=useState({firstPaymentRequired:false,paidOnce:false,amountSol:0.5,feeWallet:"",oneTimeOnly:true,reason:"",txSignature:null,isAdmin:!!adminMode});
+  const [billing,setBilling]=useState({firstPaymentRequired:false,paidOnce:false,amountSol:0.5,feeWallet:"",oneTimeOnly:true,reason:"",txSignature:null,isAdmin:false});
   const [txSig,setTxSig]=useState("");
   const [subTxSig,setSubTxSig]=useState("");
   const [pendingPlan,setPendingPlan]=useState("");
+  useEffect(()=>{ localStorage.setItem("claw_theme",theme); },[theme]);
   const nw=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
   const lg_=(m,k="i")=>sLg(p=>[{t:nw(),m,k},...p.slice(0,60)]);
   const cmd_=(m)=>{sCmdToast(m);setTimeout(()=>sCmdToast(""),2200)};
   const issue_=(text,tone="warn")=>sIssueBanner({text,tone});
-  const isAdmin = !!billing?.isAdmin || !!adminMode;
+  const isAdmin = !!billing?.isAdmin;
   const guardWallet=()=>{
     if(walletConnected) return true;
     setShowConnectModal(true);
@@ -388,7 +398,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const TABS=[{id:"overview",i:"📊"},{id:"compose",i:"✏️"},{id:"personality",i:"🎭"},{id:"skills",i:"🔧"},{id:"tokens",i:"💰"},{id:"accounts",i:"👤"},{id:"settings",i:"⚙️"},{id:"evolution",i:"🧬"},{id:"feed",i:"📡"}];
 
   return (
-    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:1.15}}>
+    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:1.35}}>
       {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
       {showConnectModal&&<div style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowConnectModal(false)}>
         <div style={{width:"100%",maxWidth:460,border:`1px solid ${X.bd}`,borderRadius:10,background:X.s,padding:18}} onClick={(e)=>e.stopPropagation()}>
@@ -412,6 +422,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             {aA&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.bd}`,fontSize:9}}><span>{aA.av}</span><span style={{fontWeight:700}}>{aA.nm}</span><span style={{color:X.d}}>{aA.hd}</span></div>}
             {wallet&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,fontSize:9,color:X.d}}>{wallet.slice(0,4)}...{wallet.slice(-4)} {isAdmin&&<span style={{padding:"1px 6px",borderRadius:3,background:X.cd,color:X.c,fontSize:8,fontWeight:800}}>ADMIN</span>} <button onClick={()=>{clearAuth();onLogout?.();}} style={{marginLeft:6,border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:3,padding:"1px 5px",fontSize:8,cursor:"pointer"}}>Logout</button></div>}
             {!walletConnected&&<Bt on={()=>setShowConnectModal(true)} c={X.a} sm>Connect Wallet</Bt>}
+            <Bt on={()=>setTheme(theme==="dark"?"light":"dark")} gh sm>{theme==="dark"?"☀ Light":"🌙 Dark"}</Bt>
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:3,background:live?X.gd:X.yd}}>
               <div style={{width:5,height:5,borderRadius:"50%",background:live?X.g:X.y}}/>
               <span style={{fontSize:8,color:live?X.g:X.y,fontWeight:700}}>{live?"LIVE":"OFFLINE"}</span>
@@ -424,7 +435,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </div>
         </div>
         <div style={{maxWidth:1840,margin:"0 auto",padding:"0 20px",display:"flex",overflowX:"auto"}}>
-          {TABS.map(t=><button key={t.id} onClick={()=>walletConnected?sTab(t.id):setShowConnectModal(true)} style={{padding:"7px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap",background:tab===t.id?X.ag:"transparent",color:tab===t.id?X.a:X.d,borderBottom:tab===t.id?`2px solid ${X.a}`:"2px solid transparent"}}>{t.i} {t.id}</button>)}
+          {TABS.map(t=><button key={t.id} onClick={()=>sTab(t.id)} style={{padding:"7px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap",background:tab===t.id?X.ag:"transparent",color:tab===t.id?X.a:X.d,borderBottom:tab===t.id?`2px solid ${X.a}`:"2px solid transparent"}}>{t.i} {t.id}</button>)}
         </div>
       </header>
 
