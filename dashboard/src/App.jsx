@@ -25,6 +25,13 @@ const SC = ["#ff3d00","#00e5ff","#d500f9","#ffd600","#00e676"];
 const IS = {width:"100%",padding:"8px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:11,outline:"none",boxSizing:"border-box"};
 const CONTRACT_ADDRESS = "EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2";
 
+const maskApiKey=(value="")=>{
+  const v = String(value||"").trim();
+  if(!v) return "None";
+  if(v.length<=8) return `${v.slice(0,2)}••••`;
+  return `${v.slice(0,4)}••••${v.slice(-3)}`;
+};
+
 function Cd({ti,children}){return <div style={{background:X.s,border:`1px solid ${X.bd}`,borderRadius:8,padding:"14px 16px"}}>{ti&&<div style={{fontSize:8,fontWeight:700,color:X.d,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10}}>{ti}</div>}{children}</div>}
 function Tg({c,bg,children}){return <span style={{fontSize:7,fontWeight:800,padding:"2px 6px",borderRadius:3,background:bg,color:c,textTransform:"uppercase"}}>{children}</span>}
 function Bt({on,dis,c,gh,sm,children}){return <button onClick={on} disabled={dis} style={{padding:sm?"4px 12px":"9px 20px",borderRadius:5,border:gh?`1px solid ${X.bd}`:"none",background:gh?"transparent":dis?X.bd:`linear-gradient(135deg,${c},${c}cc)`,color:gh?X.d:dis?X.d:"#fff",fontFamily:"inherit",fontSize:sm?9:11,fontWeight:700,cursor:dis?"not-allowed":"pointer"}}>{children}</button>}
@@ -77,6 +84,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [imgCfg,setImgCfg]=useState({
     provider:"openai",
     keys:{openai:"",stability:"",replicate:""},
+    previews:{openai:"",stability:"",replicate:""},
     configured:{openai:false,stability:false,replicate:false},
   });
   const [lg,sLg]=useState([]);
@@ -260,6 +268,11 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             stability:!!d?.imageProvidersConfigured?.stability,
             replicate:!!d?.imageProvidersConfigured?.replicate,
           },
+          previews:{
+            openai:prev.previews.openai || (d?.imageProvidersConfigured?.openai?"Saved":""),
+            stability:prev.previews.stability || (d?.imageProvidersConfigured?.stability?"Saved":""),
+            replicate:prev.previews.replicate || (d?.imageProvidersConfigured?.replicate?"Saved":""),
+          },
         }));
         if(d.subscription) setSubscription(d.subscription);
         if(d.billing) setBilling(d.billing);
@@ -296,6 +309,11 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             openai:!!d?.imageProvidersConfigured?.openai,
             stability:!!d?.imageProvidersConfigured?.stability,
             replicate:!!d?.imageProvidersConfigured?.replicate,
+          },
+          previews:{
+            openai:prev.previews.openai || (d?.imageProvidersConfigured?.openai?"Saved":""),
+            stability:prev.previews.stability || (d?.imageProvidersConfigured?.stability?"Saved":""),
+            replicate:prev.previews.replicate || (d?.imageProvidersConfigured?.replicate?"Saved":""),
           },
         }));
         if(d.subscription) setSubscription(d.subscription);
@@ -370,6 +388,11 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
               openai:!!d?.imageProvidersConfigured?.openai,
               stability:!!d?.imageProvidersConfigured?.stability,
               replicate:!!d?.imageProvidersConfigured?.replicate,
+            },
+            previews:{
+              openai:(!!d?.imageProvidersConfigured?.openai)?(s.previews.openai||"Saved"):"",
+              stability:(!!d?.imageProvidersConfigured?.stability)?(s.previews.stability||"Saved"):"",
+              replicate:(!!d?.imageProvidersConfigured?.replicate)?(s.previews.replicate||"Saved"):"",
             },
           }));
         }
@@ -668,15 +691,31 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <Cd ti="🖼️ IMAGE GENERATION">
               <div style={{fontSize:9,color:X.d,marginBottom:10}}>Image generation uses each user's own API key (never platform keys).</div>
-              {[{name:"OpenAI DALL-E 3",env:"openai",c:"#10a37f",desc:"Best quality, pay-per-use"},{name:"Stability AI",env:"stability",c:"#8b5cf6",desc:"Fast, open models"},{name:"Replicate FLUX",env:"replicate",c:"#f97316",desc:"Flexible, pay-per-use"}].map(p=>(
-                <div key={p.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,marginBottom:6}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:p.c}}/>
-                    <div><div style={{fontSize:10,fontWeight:700}}>{p.name}</div><div style={{fontSize:7,color:X.d}}>{p.desc}</div></div>
+              {[{name:"OpenAI DALL-E 3",env:"openai",c:"#10a37f",desc:"Best quality, pay-per-use"},{name:"Stability AI",env:"stability",c:"#8b5cf6",desc:"Fast, open models"},{name:"Replicate FLUX",env:"replicate",c:"#f97316",desc:"Flexible, pay-per-use"}].map(p=>{
+                const typedValue = imgCfg.keys[p.env]?.trim() || "";
+                const savedValue = imgCfg.previews[p.env] || (imgCfg.configured[p.env] ? "Saved" : "None");
+                const visibleValue = typedValue ? maskApiKey(typedValue) : savedValue;
+                return (
+                <div key={p.name} style={{padding:"10px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:p.c}}/>
+                      <div><div style={{fontSize:10,fontWeight:700}}>{p.name}</div><div style={{fontSize:7,color:X.d}}>{p.desc}</div></div>
+                    </div>
+                    <div style={{fontSize:8,color:X.d}}>provider <span style={{color:X.t,fontWeight:600}}>{p.env}</span></div>
                   </div>
-                  <div style={{fontSize:8,color:X.d}}>provider <span style={{color:X.t,fontWeight:600}}>{p.env}</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:6,alignItems:"end"}}>
+                    <div>
+                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>API KEY</div>
+                      <input value={imgCfg.keys[p.env]} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,[p.env]:e.target.value}}))} type="password" placeholder={imgCfg.configured[p.env]?"Edit key (optional)":"Paste key"} style={IS}/>
+                    </div>
+                    <div style={{fontSize:8,color:X.d,padding:"8px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.bd}`}}>
+                      <span style={{color:X.m}}>Saved API:</span>{" "}
+                      <span style={{color:visibleValue==="None"?X.d:X.g,fontWeight:700}}>{visibleValue||"None"}</span>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              )})}
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr",gap:8,marginTop:8}}>
                 <div>
                   <div style={{fontSize:8,color:X.d,marginBottom:4}}>Primary Provider</div>
@@ -686,22 +725,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
                     <option value="replicate">Replicate</option>
                   </select>
                 </div>
-                <div>
-                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Provider Keys (add/edit all 3)</div>
-                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:6}}>
-                    <div>
-                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>OPENAI {imgCfg.configured.openai&&<span style={{color:X.g}}>(stored)</span>}</div>
-                      <input value={imgCfg.keys.openai} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,openai:e.target.value}}))} type="password" placeholder={imgCfg.configured.openai?"Leave blank to keep":"Paste key"} style={IS}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>STABILITY {imgCfg.configured.stability&&<span style={{color:X.g}}>(stored)</span>}</div>
-                      <input value={imgCfg.keys.stability} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,stability:e.target.value}}))} type="password" placeholder={imgCfg.configured.stability?"Leave blank to keep":"Paste key"} style={IS}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:7,color:X.d,marginBottom:3}}>REPLICATE {imgCfg.configured.replicate&&<span style={{color:X.g}}>(stored)</span>}</div>
-                      <input value={imgCfg.keys.replicate} onChange={e=>setImgCfg(s=>({...s,keys:{...s.keys,replicate:e.target.value}}))} type="password" placeholder={imgCfg.configured.replicate?"Leave blank to keep":"Paste key"} style={IS}/>
-                    </div>
-                  </div>
+                <div style={{display:"flex",alignItems:"end"}}>
+                  <div style={{fontSize:8,color:X.d}}>Add or edit each provider key directly in its card above.</div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8}}>
@@ -745,6 +770,11 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
                     openai:s.configured.openai || !!payload.image.keys.openai,
                     stability:s.configured.stability || !!payload.image.keys.stability,
                     replicate:s.configured.replicate || !!payload.image.keys.replicate,
+                  },
+                  previews:{
+                    openai:payload.image.keys.openai?maskApiKey(payload.image.keys.openai):(s.previews.openai || (s.configured.openai?"Saved":"")),
+                    stability:payload.image.keys.stability?maskApiKey(payload.image.keys.stability):(s.previews.stability || (s.configured.stability?"Saved":"")),
+                    replicate:payload.image.keys.replicate?maskApiKey(payload.image.keys.replicate):(s.previews.replicate || (s.configured.replicate?"Saved":"")),
                   },
                 }));
                 lg_(`⚙️ Config: ${sched.postsPerHour}/hr, max ${sched.maxPostsPerDay}/day, quiet ${sched.quietStart}-${sched.quietEnd} UTC`,"o");
