@@ -53,7 +53,7 @@ export default function ClawDashboard() {
   const ws = useAgentSocket();
   const live = ws.connected;
 
-  const [ag,sAg]=useState({run:true,cy:247,pt:18,rt:34,fl:2847,fd:42,er:3.72,gn:14});
+  const [ag,sAg]=useState({run:false,cy:247,pt:18,rt:34,fl:2847,fd:42,er:3.72,gn:14});
   const [eD]=useState(mkE),[vD]=useState(mkV),[wt]=useState(mkW);
   const [ps,sPs]=useState(P0),[tk,sTk]=useState(TK0),[sk,sSk]=useState(SK0),[ac,sAc]=useState(AC0);
   const [tab,sTab]=useState("overview");
@@ -67,16 +67,26 @@ export default function ClawDashboard() {
   const [sF,sSF]=useState("all"),[csn,sCsn]=useState("");
   const [sched,setSched]=useState({postsPerHour:3,maxPostsPerDay:50,replyDelay:30,quietStart:4,quietEnd:8,autoImage:true,evoInterval:60});
   const [lg,sLg]=useState([{t:"14:32",m:"🔄 Cycle 247",k:"i"},{t:"14:32",m:"📝 Posted $SOL alpha",k:"o"},{t:"14:31",m:"⛓️ Whale: 500K SOL",k:"w"},{t:"14:30",m:"🧬 MoltBot Gen 14",k:"i"}]);
+  const [cmdToast,sCmdToast]=useState("");
   const nw=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
   const lg_=(m,k="i")=>sLg(p=>[{t:nw(),m,k},...p.slice(0,60)]);
+  const cmd_=(m)=>{sCmdToast(m);setTimeout(()=>sCmdToast(""),2200)};
 
   // ── WS event listeners ──
   useEffect(()=>{
     const u=[
-      ws.on("init",d=>{if(d.agentState)sAg(s=>({...s,...d.agentState}));if(d.accounts){const aa=d.activeAccountId;sAc(d.accounts.map(x=>{const n=normAc(x);return {...n,on:aa?n.id===aa:n.on}}))}lg_("🔌 Connected","o")}),
+      ws.on("init",d=>{
+        sAg(s=>({
+          ...s,
+          ...(d.agentState||{}),
+          run: typeof d.isRunning === "boolean" ? d.isRunning : !!d.agentState?.isRunning,
+        }));
+        if(d.accounts){const aa=d.activeAccountId;sAc(d.accounts.map(x=>{const n=normAc(x);return {...n,on:aa?n.id===aa:n.on}}))}
+        lg_("🔌 Connected","o")
+      }),
       ws.on("agent:state",d=>sAg(s=>({...s,...d}))),
-      ws.on("agent:started",d=>{sAg(s=>({...s,run:true,...d}));lg_("▶ Agent started","o")}),
-      ws.on("agent:stopped",()=>{sAg(s=>({...s,run:false}));lg_("⏹ Stopped","w")}),
+      ws.on("agent:started",d=>{sAg(s=>({...s,run:true,...d}));cmd_("Ack agent:started");lg_("▶ Agent started","o")}),
+      ws.on("agent:stopped",()=>{sAg(s=>({...s,run:false}));cmd_("Ack agent:stopped");lg_("⏹ Stopped","w")}),
       ws.on("agent:cycle",d=>{sAg(s=>({...s,cy:d.cycle||s.cy+1}));lg_(`🔄 Cycle ${d.cycle}`)}),
       ws.on("agent:post",d=>{sPs(p=>[{id:`ws${Date.now()}`,tp:d.type||"POST",ct:d.content,lk:0,rt:0,tm:nw(),st:d.strategy||"auto"},...p]);lg_(`📝 ${d.content?.slice(0,45)}...`,"o")}),
       ws.on("agent:reply",d=>{sPs(p=>[{id:`ws${Date.now()}`,tp:"REPLY",ct:d.content,lk:0,rt:0,tm:nw(),st:"auto"},...p]);lg_(`💬 ${d.content?.slice(0,40)}...`,"o")}),
@@ -91,7 +101,7 @@ export default function ClawDashboard() {
       ws.on("skill:toggled",d=>lg_(`🔧 ${d.enabled?"ON":"OFF"}: ${d.skillId}`,d.enabled?"o":"w")),
       ws.on("token:added",d=>{sTk(p=>[...p,{sym:d.symbol||"???",mint:d.mint,pr:0,ch:0}]);lg_(`📌 +$${d.symbol}`,"o")}),
       ws.on("token:removed",d=>{sTk(p=>p.filter(t=>t.mint!==d.mint));lg_("🗑️ Token removed","w")}),
-      ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...normAc(a),on:a.id===d.accountId})));lg_("🔄 Account switched","o")}),
+      ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...normAc(a),on:a.id===d.accountId})));cmd_("Ack account:switched");lg_("🔄 Account switched","o")}),
       ws.on("account:added",d=>{const na=normAc(d);sAc(p=>[...p,na]);lg_(`➕ ${na.nm||na.hd||"Account"}`,"o")}),
       ws.on("account:removed",d=>{sAc(p=>p.filter(a=>a.id!==d.accountId));lg_("🗑️ Account removed","w")}),
       ws.on("image:generated",d=>{sMP(p=>[...p,{t:"image",url:d.url}].slice(0,4));lg_("🖼️ Generated","o");sGn(false)}),
@@ -127,8 +137,15 @@ export default function ClawDashboard() {
     sAg(s=>({...s,pt:s.pt+1}));sDr("");sRTo("");sMP([]);sPOk(true);setTimeout(()=>sPOk(false),3e3)};
 
   const toggleAgent=()=>{
-    if(live){ws.send(ag.run?"agent:stop":"agent:start")}
-    sAg(s=>({...s,run:!s.run}));lg_(ag.run?"⏹ Stopping...":"▶ Starting...");
+    if(live){
+      const cmd = ag.run?"agent:stop":"agent:start";
+      const ok = ws.send(cmd);
+      cmd_(ok?`Sent ${cmd}`:`Failed ${cmd}`);
+      lg_(ok?(ag.run?"⏹ Stopping...":"▶ Starting..."):"⚠️ Not connected to backend","w");
+      return;
+    }
+    sAg(s=>({...s,run:!s.run}));
+    lg_(ag.run?"⏹ Stopping...":"▶ Starting...");
   };
 
   const savePe=()=>{
@@ -154,7 +171,10 @@ export default function ClawDashboard() {
     lg_(`🗑️ -$${t.sym}`,"w")};
 
   const swAc=(a)=>{
-    if(live){ws.send("account:switch",{accountId:a.id})}
+    if(live){
+      const ok = ws.send("account:switch",{accountId:a.id});
+      cmd_(ok?"Sent account:switch":"Failed account:switch");
+    }
     else{sAc(p=>p.map(x=>({...x,on:x.id===a.id})))}
     lg_(`🔄 → ${a.nm}`,"o")};
 
@@ -181,6 +201,7 @@ export default function ClawDashboard() {
 
   return (
     <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace"}}>
+      {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
       <header style={{position:"sticky",top:0,zIndex:50,background:`${X.b}f0`,borderBottom:`1px solid ${X.bd}`,backdropFilter:"blur(20px)"}}>
         <div style={{maxWidth:1480,margin:"0 auto",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
