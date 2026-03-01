@@ -32,6 +32,14 @@ const maskApiKey=(value="")=>{
   return `${v.slice(0,4)}••••${v.slice(-3)}`;
 };
 
+const resolveMediaUrl=(url="")=>{
+  const raw = String(url||"").trim();
+  if(!raw) return "";
+  if(/^blob:|^data:|^https?:\/\//i.test(raw)) return raw;
+  if(raw.startsWith("/")) return `${API_URL}${raw}`;
+  return `${API_URL}/${raw}`;
+};
+
 function Cd({ti,children}){return <div style={{background:X.s,border:`1px solid ${X.bd}`,borderRadius:8,padding:"14px 16px"}}>{ti&&<div style={{fontSize:8,fontWeight:700,color:X.d,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10}}>{ti}</div>}{children}</div>}
 function Tg({c,bg,children}){return <span style={{fontSize:7,fontWeight:800,padding:"2px 6px",borderRadius:3,background:bg,color:c,textTransform:"uppercase"}}>{children}</span>}
 function Bt({on,dis,c,gh,sm,children}){return <button onClick={on} disabled={dis} style={{padding:sm?"4px 12px":"9px 20px",borderRadius:5,border:gh?`1px solid ${X.bd}`:"none",background:gh?"transparent":dis?X.bd:`linear-gradient(135deg,${c},${c}cc)`,color:gh?X.d:dis?X.d:"#fff",fontFamily:"inherit",fontSize:sm?9:11,fontWeight:700,cursor:dis?"not-allowed":"pointer"}}>{children}</button>}
@@ -89,7 +97,9 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   });
   const [lg,sLg]=useState([]);
   const [cmdToast,sCmdToast]=useState("");
+  const [cmdToastLeaving,setCmdToastLeaving]=useState(false);
   const [issueBanner,sIssueBanner]=useState(null);
+  const [issueBannerLeaving,setIssueBannerLeaving]=useState(false);
   const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0.3,influencer:0.5,celebrity:1},paidPlans:{}});
   const [billing,setBilling]=useState({firstPaymentRequired:false,paidOnce:false,amountSol:0.5,feeWallet:"",oneTimeOnly:true,reason:"",txSignature:null,isAdmin:false});
   const [txSig,setTxSig]=useState("");
@@ -97,6 +107,10 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [pendingPlan,setPendingPlan]=useState("");
   const [viewportWidth,setViewportWidth]=useState(typeof window !== "undefined" ? window.innerWidth : 1280);
   const [solPrice,setSolPrice]=useState(null);
+  const toastLeaveTimerRef = useRef(null);
+  const toastTimerRef = useRef(null);
+  const issueLeaveTimerRef = useRef(null);
+  const issueTimerRef = useRef(null);
   const prevWalletConnectedRef = useRef(walletConnected);
   const isTablet = viewportWidth < 1100;
   const isMobile = viewportWidth < 760;
@@ -137,8 +151,34 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   },[walletConnected]);
   const nw=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
   const lg_=(m,k="i")=>sLg(p=>[{t:nw(),m,k},...p.slice(0,60)]);
-  const cmd_=(m)=>{sCmdToast(m);setTimeout(()=>sCmdToast(""),2200)};
-  const issue_=(text,tone="warn")=>sIssueBanner({text,tone});
+  const cmd_=(m)=>{
+    if(toastLeaveTimerRef.current) clearTimeout(toastLeaveTimerRef.current);
+    if(toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setCmdToastLeaving(false);
+    sCmdToast(m);
+    toastLeaveTimerRef.current = setTimeout(()=>setCmdToastLeaving(true),1880);
+    toastTimerRef.current = setTimeout(()=>{setCmdToastLeaving(false);sCmdToast("");},2200);
+  };
+  const issue_=(text,tone="warn")=>{
+    if(issueLeaveTimerRef.current) clearTimeout(issueLeaveTimerRef.current);
+    if(issueTimerRef.current) clearTimeout(issueTimerRef.current);
+    setIssueBannerLeaving(false);
+    sIssueBanner({text,tone});
+    issueLeaveTimerRef.current = setTimeout(()=>setIssueBannerLeaving(true),2880);
+    issueTimerRef.current = setTimeout(()=>{setIssueBannerLeaving(false);sIssueBanner(null);},3200);
+  };
+  const closeIssueBanner=()=>{
+    if(issueLeaveTimerRef.current) clearTimeout(issueLeaveTimerRef.current);
+    if(issueTimerRef.current) clearTimeout(issueTimerRef.current);
+    setIssueBannerLeaving(true);
+    issueTimerRef.current = setTimeout(()=>{setIssueBannerLeaving(false);sIssueBanner(null);},240);
+  };
+  useEffect(()=>()=>{
+    if(toastLeaveTimerRef.current) clearTimeout(toastLeaveTimerRef.current);
+    if(toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    if(issueLeaveTimerRef.current) clearTimeout(issueLeaveTimerRef.current);
+    if(issueTimerRef.current) clearTimeout(issueTimerRef.current);
+  },[]);
   useEffect(()=>{
     if(walletConnected && !prevWalletConnectedRef.current){
       cmd_("Wallet connected");
@@ -359,7 +399,17 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
       ws.on("account:removed",d=>{sAc(p=>p.filter(a=>a.id!==d.accountId));lg_("🗑️ Account removed","w")}),
       ws.on("payment:required",d=>{setBilling((prev)=>({...prev,...d,firstPaymentRequired:true}));issue_("One-time 0.5 SOL payment required before adding your first account.","warn");}),
       ws.on("subscription:payment-required",d=>{setPendingPlan(d.plan||"");issue_(d.message||"Plan payment required before upgrade.","warn")}),
-      ws.on("image:generated",d=>{sMP(p=>[...p,{t:"image",url:d.url}].slice(0,4));lg_("🖼️ Generated","o");sGn(false)}),
+      ws.on("image:generated",d=>{
+        const mediaUrl = resolveMediaUrl(d?.url);
+        if(!mediaUrl){
+          lg_("❌ ImgGen: invalid image URL","w");
+          sGn(false);
+          return;
+        }
+        sMP(p=>[...p,{t:"image",url:mediaUrl}].slice(0,4));
+        lg_("🖼️ Generated","o");
+        sGn(false)
+      }),
       ws.on("image:error",d=>{
         const msg = String(d?.message||"Image generation failed");
         lg_(`❌ ImgGen: ${msg}`,"w");
@@ -524,7 +574,10 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
 
   return (
     <div style={{background:X.b,color:X.t,height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'JetBrains Mono','Fira Code',monospace",fontSize:isMobile?13:14}}>
-      {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
+      {(issueBanner||cmdToast)&&<div style={{position:"fixed",right:12,bottom:isMobile?82:58,zIndex:1000,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,pointerEvents:"none",maxWidth:isMobile?"calc(100vw - 24px)":"min(520px,calc(100vw - 24px))"}}>
+        {issueBanner&&<div style={{padding:"8px 10px",borderRadius:6,background:X.s,border:`1px solid ${X.y}66`,color:X.y,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:8,animation:issueBannerLeaving?"clawToastOut .24s ease-in forwards":"clawToastIn .22s ease-out",pointerEvents:"auto",maxWidth:"100%"}}><span style={{flex:1}}>{issueBanner.text}</span><button onClick={closeIssueBanner} style={{border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:4,fontSize:10,padding:"2px 6px",cursor:"pointer"}}>x</button></div>}
+        {cmdToast&&<div style={{padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5,animation:cmdToastLeaving?"clawToastOut .24s ease-in forwards":"clawToastIn .22s ease-out",pointerEvents:"auto",maxWidth:"100%"}}>{cmdToast}</div>}
+      </div>}
       {showConnectModal&&<div style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowConnectModal(false)}>
         <div style={{width:"100%",maxWidth:460,border:`1px solid ${X.bd}`,borderRadius:10,background:X.s,padding:18}} onClick={(e)=>e.stopPropagation()}>
           <h3 style={{margin:0,marginBottom:8,color:X.a,fontSize:18}}>{adminMode?"Connect Admin Wallet":"Connect Wallet"}</h3>
@@ -536,7 +589,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           {connectError&&<div style={{marginTop:10,color:X.y,fontSize:11,whiteSpace:"pre-wrap"}}>{connectError}</div>}
         </div>
       </div>}
-      {issueBanner&&<div style={{position:"fixed",top:40,right:12,zIndex:999,padding:"8px 10px",borderRadius:6,background:X.s,border:`1px solid ${X.y}66`,color:X.y,fontSize:11,fontWeight:700,maxWidth:520,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1}}>{issueBanner.text}</span><button onClick={()=>sIssueBanner(null)} style={{border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:4,fontSize:10,padding:"2px 6px",cursor:"pointer"}}>x</button></div>}
+
       <header style={{position:"sticky",top:0,zIndex:50,background:`${X.b}f0`,borderBottom:`1px solid ${X.bd}`,backdropFilter:"blur(20px)"}}>
         <div style={{maxWidth:1840,margin:"0 auto",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -584,7 +637,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
               <div style={{display:"flex",gap:5,marginBottom:10}}>{["POST","REPLY","QUOTE"].map(t=><button key={t} onClick={()=>sPT(t)} style={{padding:"6px 13px",borderRadius:4,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,background:pT===t?X.a:X.b,color:pT===t?"#fff":X.d}}>{t}</button>)}</div>
               {pT!=="POST"&&<div style={{marginBottom:8}}><div style={{fontSize:8,color:X.a,letterSpacing:1,marginBottom:3}}>{pT==="REPLY"?"💬 REPLY TO TWEET ID":"🔁 QUOTE TWEET ID"}</div><input value={rTo} onChange={e=>sRTo(e.target.value)} placeholder={pT==="REPLY"?"Paste tweet ID to reply to...":"Paste tweet ID to quote..."} style={{...IS,border:`1px solid ${rTo?X.a:X.bd}`}}/><div style={{fontSize:7,color:X.m,marginTop:3}}>Find tweet ID in the URL: twitter.com/user/status/<span style={{color:X.t}}>1234567890</span></div></div>}
               <div style={{position:"relative"}}><textarea value={dr} onChange={e=>sDr(e.target.value)} placeholder="What's happening..." rows={4} style={{width:"100%",padding:11,borderRadius:5,background:X.b,border:`1px solid ${co?X.r:dr?X.a:X.bd}`,color:X.t,fontFamily:"inherit",fontSize:12,lineHeight:1.6,resize:"vertical",outline:"none",boxSizing:"border-box"}}/><span style={{position:"absolute",bottom:8,right:10,fontSize:9,fontWeight:600,color:co?X.r:cc>240?X.y:X.d}}>{cc}/280</span></div>
-              {mP.length>0&&<div style={{display:"flex",gap:6,marginTop:6}}>{mP.map((m,i)=><div key={i} style={{position:"relative",width:64,height:64,borderRadius:5,overflow:"hidden",border:`1px solid ${X.bd}`}}>{m.t==="video"?<div style={{width:"100%",height:"100%",background:X.s,display:"flex",alignItems:"center",justifyContent:"center"}}>🎬</div>:<img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}<button onClick={()=>sMP(p=>p.filter((_,j)=>j!==i))} style={{position:"absolute",top:1,right:1,width:14,height:14,borderRadius:"50%",border:"none",background:X.r,color:"#fff",fontSize:7,cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div>)}</div>}
+              {mP.length>0&&<div style={{display:"flex",gap:6,marginTop:6}}>{mP.map((m,i)=><div key={i} style={{position:"relative",width:64,height:64,borderRadius:5,overflow:"hidden",border:`1px solid ${X.bd}`}}>{m.t==="video"?<div style={{width:"100%",height:"100%",background:X.s,display:"flex",alignItems:"center",justifyContent:"center"}}>🎬</div>:<img src={resolveMediaUrl(m.url)} alt="" onError={(e)=>{e.currentTarget.style.display="none";}} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}<button onClick={()=>sMP(p=>p.filter((_,j)=>j!==i))} style={{position:"absolute",top:1,right:1,width:14,height:14,borderRadius:"50%",border:"none",background:X.r,color:"#fff",fontSize:7,cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div>)}</div>}
               <div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}><input ref={fR} type="file" multiple accept="image/*,video/*" onChange={hF} style={{display:"none"}}/><Mb on={()=>fR.current?.click()}>📷 Media</Mb><Mb on={()=>sShowAI(s=>!s)}>🖼️ AI {showAI?"▾":"▸"}</Mb><span style={{fontSize:7,color:X.d}}>{mP.length}/4</span></div>
               <div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}><Mb on={genRandomPost}>🎲 Random {aiSt}</Mb></div>
               {showAI&&<div style={{marginTop:6,padding:10,borderRadius:5,background:X.b,border:`1px solid ${X.bd}`}}><div style={{display:"flex",gap:3,marginBottom:6,flexWrap:"wrap"}}>{["meme","alpha-card","chart","degen-art"].map(s=><button key={s} onClick={()=>sAiSt(s)} style={{padding:"3px 8px",borderRadius:3,border:`1px solid ${aiSt===s?X.a:X.bd}`,background:aiSt===s?X.ag:"transparent",color:aiSt===s?X.a:X.d,fontFamily:"inherit",fontSize:8,cursor:"pointer"}}>{s}</button>)}</div><div style={{display:"flex",gap:5}}><input value={aiPr} onChange={e=>sAiPr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&genAI()} placeholder="Describe..." style={{flex:1,padding:"6px 8px",borderRadius:3,background:X.s,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:10,outline:"none"}}/><Bt on={genAI} dis={!aiPr.trim()||gn} c={X.p} sm>{gn?"⏳":"✨"}</Bt></div></div>}
@@ -594,7 +647,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             </Cd>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <Cd ti="PREVIEW"><div style={{padding:10,borderRadius:6,background:"#15202b",border:"1px solid #38444d",minHeight:80}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}><div style={{width:28,height:28,borderRadius:"50%",background:`linear-gradient(135deg,${X.a},${X.as})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>{aA?.av||"🦀"}</div><div><div style={{fontWeight:700,fontSize:10,color:"#e7e9ea"}}>{aA?.nm||"Agent"}</div><div style={{fontSize:8,color:"#71767b"}}>{aA?.hd} · now</div></div></div><div style={{fontSize:10,color:"#e7e9ea",lineHeight:1.5,whiteSpace:"pre-wrap",fontFamily:"sans-serif"}}>{dr||<span style={{color:"#71767b"}}>Preview...</span>}</div>{mP.length>0&&<div style={{display:"flex",gap:3,marginTop:6}}>{mP.map((m,i)=><div key={i} style={{width:50,height:50,borderRadius:5,background:X.s,overflow:"hidden"}}>{m.t==="video"?<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>🎬</div>:<img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}</div>)}</div>}</div></Cd>
+            <Cd ti="PREVIEW"><div style={{padding:10,borderRadius:6,background:"#15202b",border:"1px solid #38444d",minHeight:80}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}><div style={{width:28,height:28,borderRadius:"50%",background:`linear-gradient(135deg,${X.a},${X.as})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>{aA?.av||"🦀"}</div><div><div style={{fontWeight:700,fontSize:10,color:"#e7e9ea"}}>{aA?.nm||"Agent"}</div><div style={{fontSize:8,color:"#71767b"}}>{aA?.hd} · now</div></div></div><div style={{fontSize:10,color:"#e7e9ea",lineHeight:1.5,whiteSpace:"pre-wrap",fontFamily:"sans-serif"}}>{dr||<span style={{color:"#71767b"}}>Preview...</span>}</div>{mP.length>0&&<div style={{display:"flex",gap:3,marginTop:6}}>{mP.map((m,i)=><div key={i} style={{width:50,height:50,borderRadius:5,background:X.s,overflow:"hidden"}}>{m.t==="video"?<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>🎬</div>:<img src={resolveMediaUrl(m.url)} alt="" onError={(e)=>{e.currentTarget.style.display="none";}} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}</div>)}</div>}</div></Cd>
             <Cd ti="PERSONALITY"><ResponsiveContainer width="100%" height={120}><RadarChart data={rd}><PolarGrid stroke={X.bd}/><PolarAngleAxis dataKey="s" tick={{fill:X.d,fontSize:7}}/><PolarRadiusAxis tick={false} domain={[0,1]} axisLine={false}/><Radar dataKey="v" stroke={X.a} fill={X.a} fillOpacity={.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></Cd>
           </div>
         </div>}
@@ -805,7 +858,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </button>
         </div>
       </footer>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');html,body,#root{height:100%;overflow:hidden}*{box-sizing:border-box;margin:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#08090d}::-webkit-scrollbar-thumb{background:#1c1e30;border-radius:2px}textarea::placeholder,input::placeholder{color:#33354a}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');html,body,#root{height:100%;overflow:hidden}*{box-sizing:border-box;margin:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#08090d}::-webkit-scrollbar-thumb{background:#1c1e30;border-radius:2px}textarea::placeholder,input::placeholder{color:#33354a}@keyframes clawToastIn{0%{opacity:0;transform:translateY(-8px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes clawToastOut{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-8px) scale(.98)}}`}</style>
     </div>
   );
 }
