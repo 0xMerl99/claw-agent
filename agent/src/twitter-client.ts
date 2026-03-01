@@ -232,7 +232,15 @@ export class TwitterClient {
     this.updateRateLimit(endpoint, response.headers);
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
+      const rawBody = await response.text().catch(() => '');
+      let error: any = {};
+      try {
+        error = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        error = { raw: rawBody };
+      }
+
+      console.error(`❌ [Twitter ${method} ${endpoint}] ${response.status}`, error);
       if (response.status === 429) {
         // Rate limited — queue and retry
         const resetAt = parseInt(response.headers.get('x-rate-limit-reset') || '0') * 1000;
@@ -259,7 +267,17 @@ export class TwitterClient {
       body: new URLSearchParams(body).toString(),
     });
 
-    if (!response.ok) throw new TwitterApiError(response.status, await response.json());
+    if (!response.ok) {
+      const rawBody = await response.text().catch(() => '');
+      let error: any = {};
+      try {
+        error = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        error = { raw: rawBody };
+      }
+      console.error(`❌ [Twitter V1 ${method}] ${response.status}`, error);
+      throw new TwitterApiError(response.status, error);
+    }
     return response.json();
   }
 

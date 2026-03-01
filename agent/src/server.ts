@@ -56,6 +56,7 @@ interface AgentAccount {
 
 let accounts: AgentAccount[] = [];
 let activeAccountId: string | null = null;
+let stateBroadcastInterval: NodeJS.Timeout | null = null;
 
 // ── BROADCAST ────────────────────────────────────────────────
 function broadcast(type: string, data: any) {
@@ -183,6 +184,16 @@ async function handleWsMessage(msg: any, ws: WebSocket) {
       break;
 
     case 'account:add':
+      {
+        const required = ['name', 'handle', 'apiKey', 'apiSecret', 'accessToken', 'accessTokenSecret', 'bearerToken'];
+        const missing = required.filter((k) => !msg.data?.[k] || String(msg.data[k]).trim().length === 0);
+        if (missing.length > 0) {
+          const reason = `Missing required account fields: ${missing.join(', ')}`;
+          console.warn(`⚠️ [AccountAdd] ${reason}`);
+          ws.send(JSON.stringify({ type: 'agent:error', data: { message: reason } }));
+          break;
+        }
+      }
       const acc = createAccount(msg.data);
       accounts.push(acc);
       broadcast('account:added', { ...acc, config: undefined });
@@ -216,10 +227,14 @@ async function handleWsMessage(msg: any, ws: WebSocket) {
 // ── AGENT EVENT HOOKS ────────────────────────────────────────
 function hookAgentEvents() {
   if (!agent) return;
+  if (stateBroadcastInterval) {
+    clearInterval(stateBroadcastInterval);
+    stateBroadcastInterval = null;
+  }
   const events = ['cycle', 'post', 'reply', 'error', 'evolution', 'onchain', 'metrics', 'image:auto'];
   events.forEach(evt => agent!.on(evt, (data: any) => broadcast(`agent:${evt}`, data)));
 
-  setInterval(() => {
+  stateBroadcastInterval = setInterval(() => {
     if (agent) broadcast('agent:state', { ...agent.getState(), performance: agent.getPerformance() });
   }, 10_000);
 }
@@ -247,6 +262,10 @@ function createAccount(data: any): AgentAccount {
 
 async function switchAccount(accountId: string | null) {
   if (agent) { await agent.stop(); agent = null; }
+  if (stateBroadcastInterval) {
+    clearInterval(stateBroadcastInterval);
+    stateBroadcastInterval = null;
+  }
   accounts.forEach(a => (a.isActive = false));
   if (!accountId) { activeAccountId = null; activeConfig = null; return true; }
   const account = accounts.find(a => a.id === accountId);
@@ -254,9 +273,7 @@ async function switchAccount(accountId: string | null) {
   account.isActive = true;
   activeAccountId = accountId;
   activeConfig = account.config;
-  agent = new ClawdBot(activeConfig);
-  hookAgentEvents();
-  await agent.start();
+
   return true;
 }
 
