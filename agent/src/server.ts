@@ -85,6 +85,7 @@ wss.on('connection', (ws) => {
   ws.on('message', async (raw) => {
     try {
       const msg = JSON.parse(raw.toString());
+      console.log(`📨 WS message: ${msg.type}`);
       await handleWsMessage(msg, ws);
     } catch (e) {
       ws.send(JSON.stringify({ type: 'error', data: { message: String(e) } }));
@@ -99,12 +100,20 @@ wss.on('connection', (ws) => {
 async function handleWsMessage(msg: any, ws: WebSocket) {
   switch (msg.type) {
     case 'agent:start':
-      if (!agent && activeConfig) {
-        agent = new ClawdBot(activeConfig);
-        hookAgentEvents();
-        await agent.start();
-        broadcast('agent:started', agent.getState());
+      if (!activeConfig) {
+        const reason = 'No active account selected. Add/switch an account first.';
+        console.warn(`⚠️ [AgentStart] ${reason}`);
+        ws.send(JSON.stringify({ type: 'agent:error', data: { message: reason } }));
+        break;
       }
+      if (agent) {
+        ws.send(JSON.stringify({ type: 'agent:state', data: agent.getState() }));
+        break;
+      }
+      agent = new ClawdBot(activeConfig);
+      hookAgentEvents();
+      await agent.start();
+      broadcast('agent:started', agent.getState());
       break;
 
     case 'agent:stop':
@@ -155,7 +164,21 @@ async function handleWsMessage(msg: any, ws: WebSocket) {
       break;
 
     case 'account:switch':
-      await switchAccount(msg.data.accountId);
+      if (!msg.data?.accountId) {
+        const reason = 'Missing accountId for account:switch.';
+        console.warn(`⚠️ [AccountSwitch] ${reason}`);
+        ws.send(JSON.stringify({ type: 'agent:error', data: { message: reason } }));
+        break;
+      }
+      {
+        const ok = await switchAccount(msg.data.accountId);
+        if (!ok) {
+          const reason = `Account not found: ${msg.data.accountId}`;
+          console.warn(`⚠️ [AccountSwitch] ${reason}`);
+          ws.send(JSON.stringify({ type: 'agent:error', data: { message: reason } }));
+          break;
+        }
+      }
       broadcast('account:switched', { accountId: msg.data.accountId, state: agent?.getState() });
       break;
 
@@ -225,15 +248,16 @@ function createAccount(data: any): AgentAccount {
 async function switchAccount(accountId: string | null) {
   if (agent) { await agent.stop(); agent = null; }
   accounts.forEach(a => (a.isActive = false));
-  if (!accountId) { activeAccountId = null; activeConfig = null; return; }
+  if (!accountId) { activeAccountId = null; activeConfig = null; return true; }
   const account = accounts.find(a => a.id === accountId);
-  if (!account) return;
+  if (!account) return false;
   account.isActive = true;
   activeAccountId = accountId;
   activeConfig = account.config;
   agent = new ClawdBot(activeConfig);
   hookAgentEvents();
   await agent.start();
+  return true;
 }
 
 // ── REST ENDPOINTS ───────────────────────────────────────────
