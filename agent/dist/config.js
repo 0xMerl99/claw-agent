@@ -23,6 +23,7 @@ exports.DEFAULT_CONFIG = {
     },
     schedule: {
         postsPerHour: 3,
+        maxPostsPerDay: 50,
         replyDelayMs: 30_000,
         engagementWindowHours: 2,
         quietHoursUTC: [4, 8],

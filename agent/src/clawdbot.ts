@@ -56,6 +56,18 @@ export class ClawdBot extends EventEmitter {
   private solanaWatcher: SolanaWatcher;
   private contentEngine: ContentEngine;
   private decisionInterval: NodeJS.Timeout | null = null;
+  private skillStates: Record<string, boolean> = {
+    s1: true,
+    s2: true,
+    s3: true,
+    s4: true,
+    s5: true,
+    s6: true,
+    s7: false,
+    s8: false,
+    s9: false,
+    s10: false,
+  };
 
   constructor(config: AgentConfig) {
     super();
@@ -150,6 +162,13 @@ export class ClawdBot extends EventEmitter {
         return;
       }
 
+      const maxPostsPerDay = this.config.schedule.maxPostsPerDay ?? Number.MAX_SAFE_INTEGER;
+      if (this.state.postsToday >= maxPostsPerDay) {
+        console.log(`🧱 Daily post cap reached (${maxPostsPerDay}) — skipping post actions`);
+        await this.handleMentions();
+        return;
+      }
+
       // 2. Gather context
       const context = await this.gatherContext();
 
@@ -182,6 +201,7 @@ export class ClawdBot extends EventEmitter {
       // 7. MoltBot evolution check
       if (this.state.currentCycle % 10 === 0) {
         await this.moltBot.evolve(this.state.performance);
+        this.emit('evolution', { message: `Evolution cycle ${Math.floor(this.state.currentCycle / 10)} complete` });
       }
 
     } catch (error) {
@@ -469,22 +489,20 @@ export class ClawdBot extends EventEmitter {
   }
 
   toggleSkill(skillId: string, enabled: boolean): void {
-    const strategyMap: Record<string, string> = {
-      s1: 'market-alpha',
-      s2: 'market-alpha',
-      s3: 'shill',
-      s4: 'on-chain-callout',
-      s6: 'on-chain-callout',
+    this.skillStates[skillId] = !!enabled;
+    this.recomputeStrategiesFromSkills();
+  }
+
+  setSkillStates(states: Record<string, boolean>): void {
+    this.skillStates = {
+      ...this.skillStates,
+      ...states,
     };
+    this.recomputeStrategiesFromSkills();
+  }
 
-    const strategy = strategyMap[skillId];
-    if (!strategy) return;
-
-    const exists = this.state.activeStrategies.includes(strategy);
-    if (enabled && !exists) this.state.activeStrategies.push(strategy);
-    if (!enabled && exists) {
-      this.state.activeStrategies = this.state.activeStrategies.filter((s) => s !== strategy);
-    }
+  getSkillStates(): Record<string, boolean> {
+    return { ...this.skillStates };
   }
 
   registerCustomSkill(_data: any): void {
@@ -498,6 +516,27 @@ export class ClawdBot extends EventEmitter {
 
   removeToken(mint: string): void {
     this.config.solana.targetTokens = this.config.solana.targetTokens.filter((t) => t !== mint);
+  }
+
+  getTrackedTokens(): any[] {
+    return this.solanaWatcher.getLatestData().trackedTokens;
+  }
+
+  private recomputeStrategiesFromSkills(): void {
+    const next: string[] = [];
+
+    if (this.skillStates.s1 || this.skillStates.s2) next.push('market-alpha');
+    if (this.skillStates.s8) next.push('meme-post');
+    if (this.skillStates.s10) next.push('engagement-reply');
+    if (this.skillStates.s3) next.push('shill');
+    if (this.skillStates.s4 || this.skillStates.s6) next.push('on-chain-callout');
+
+    if (next.length === 0) {
+      next.push('market-alpha');
+      this.skillStates.s1 = true;
+    }
+
+    this.state.activeStrategies = Array.from(new Set(next));
   }
 }
 

@@ -29,6 +29,7 @@ export interface AgentConfig {
     };
     schedule: {
         postsPerHour: number;
+        maxPostsPerDay?: number;
         replyDelayMs: number;
         engagementWindowHours: number;
         quietHoursUTC: [number, number];

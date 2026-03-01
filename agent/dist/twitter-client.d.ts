@@ -33,5 +33,6 @@ export declare class TwitterClient {
     private getAuthenticatedUserId;
     private generateOAuth1Header;
     private sleep;
+    private requiresUserContext;
 }
 //# sourceMappingURL=twitter-client.d.ts.map

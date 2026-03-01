@@ -44,6 +44,7 @@ export interface AgentConfig {
   // Posting Schedule
   schedule: {
     postsPerHour: number;
+    maxPostsPerDay?: number;
     replyDelayMs: number;
     engagementWindowHours: number;
     quietHoursUTC: [number, number];  // e.g., [4, 8] = 4am-8am UTC
@@ -81,6 +82,7 @@ export const DEFAULT_CONFIG: Partial<AgentConfig> = {
   },
   schedule: {
     postsPerHour: 3,
+    maxPostsPerDay: 50,
     replyDelayMs: 30_000,
     engagementWindowHours: 2,
     quietHoursUTC: [4, 8],

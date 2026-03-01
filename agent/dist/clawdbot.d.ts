@@ -1,4 +1,5 @@
-import { AgentConfig } from './config';
+import { AgentConfig, PersonalityProfile } from './config';
+import { EventEmitter } from 'events';
 export type AgentAction = {
     type: 'POST';
     content: string;
@@ -42,7 +43,7 @@ export interface PerformanceMetrics {
     topPerformingTopics: Map<string, number>;
     engagementRate: number;
 }
-export declare class ClawdBot {
+export declare class ClawdBot extends EventEmitter {
     private state;
     private config;
     private twitter;
@@ -51,6 +52,7 @@ export declare class ClawdBot {
     private solanaWatcher;
     private contentEngine;
     private decisionInterval;
+    private skillStates;
     constructor(config: AgentConfig);
     private initState;
     start(): Promise<void>;
@@ -66,5 +68,26 @@ export declare class ClawdBot {
     private sleep;
     getState(): AgentState;
     getPerformance(): PerformanceMetrics;
+    manualPost(data: {
+        content: string;
+        type?: string;
+        replyToId?: string;
+        mediaIds?: string[];
+    }): Promise<void>;
+    addToQueue(data: {
+        content: string;
+        type?: string;
+        replyToId?: string;
+        mediaIds?: string[];
+    }): void;
+    updatePersonality(update: Partial<PersonalityProfile>): void;
+    toggleSkill(skillId: string, enabled: boolean): void;
+    setSkillStates(states: Record<string, boolean>): void;
+    getSkillStates(): Record<string, boolean>;
+    registerCustomSkill(_data: any): void;
+    addToken(mint: string): Promise<void>;
+    removeToken(mint: string): void;
+    getTrackedTokens(): any[];
+    private recomputeStrategiesFromSkills;
 }
 //# sourceMappingURL=clawdbot.d.ts.map

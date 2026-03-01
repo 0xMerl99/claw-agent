@@ -28,6 +28,8 @@ services:
         sync: false
       - key: SOLANA_RPC_URL
         sync: false
+      - key: CLAW_ADMIN_WALLETS
+        sync: false
       # Image gen — set all you have, auto-detects
       - key: OPENAI_API_KEY
         sync: false

@@ -5,7 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export { API_URL };
 
-export function useAgentSocket() {
+export function useAgentSocket(token) {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const listenersRef = useRef({});
@@ -13,9 +13,11 @@ export function useAgentSocket() {
   const retriesRef = useRef(0);
 
   const connect = useCallback(() => {
+    if (!token) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     try {
-      const ws = new WebSocket(WS_URL);
+      const url = `${WS_URL}${WS_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      const ws = new WebSocket(url);
       ws.onopen = () => { setConnected(true); retriesRef.current = 0; };
       ws.onclose = () => {
         setConnected(false);
@@ -35,7 +37,7 @@ export function useAgentSocket() {
     } catch {
       reconnectRef.current = setTimeout(connect, Math.min(1000 * Math.pow(2, retriesRef.current++), 30000));
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => { connect(); return () => { wsRef.current?.close(); clearTimeout(reconnectRef.current); }; }, [connect]);
 

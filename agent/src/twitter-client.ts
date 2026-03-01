@@ -200,7 +200,8 @@ export class TwitterClient {
     method: string,
     endpoint: string,
     body?: any,
-    params?: Record<string, any>
+    params?: Record<string, any>,
+    forceOAuth = false
   ): Promise<any> {
     // Rate limit check
     await this.checkRateLimit(endpoint);
@@ -214,13 +215,19 @@ export class TwitterClient {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.config.bearerToken}`,
       'Content-Type': 'application/json',
     };
 
-    // For write operations, use OAuth 1.0a
-    if (method === 'POST' || method === 'DELETE') {
+    const useOAuth =
+      forceOAuth ||
+      method === 'POST' ||
+      method === 'DELETE' ||
+      this.requiresUserContext(endpoint);
+
+    if (useOAuth) {
       headers.Authorization = this.generateOAuth1Header(method, url);
+    } else {
+      headers.Authorization = `Bearer ${this.config.bearerToken}`;
     }
 
     const options: RequestInit = { method, headers };
@@ -249,6 +256,16 @@ export class TwitterClient {
         await this.sleep(waitMs);
         return this.request(method, endpoint, body, params);
       }
+      const isUnsupportedAuth =
+        response.status === 403 &&
+        (error?.type === 'https://api.twitter.com/2/problems/unsupported-authentication' ||
+          String(error?.title || '').toLowerCase().includes('unsupported authentication'));
+
+      if (isUnsupportedAuth && !useOAuth) {
+        console.warn(`↩️ [Twitter] Retrying ${method} ${endpoint} with OAuth 1.0a user context`);
+        return this.request(method, endpoint, body, params, true);
+      }
+
       throw new TwitterApiError(response.status, error);
     }
 
@@ -375,6 +392,11 @@ export class TwitterClient {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private requiresUserContext(endpoint: string): boolean {
+    if (endpoint === '/users/me') return true;
+    return /^\/users\/.+\/(timelines\/reverse_chronological|mentions|likes|retweets)$/.test(endpoint);
   }
 }
 

@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   PieChart, Pie, Cell
 } from "recharts";
 import { useAgentSocket, API_URL } from "./useAgentSocket";
+import { authFetch, clearAuth } from "./auth";
 
 const X = {
   b:"#08090d",s:"#101118",bd:"#1c1e30",a:"#ff3d00",as:"#ff6d3a",ag:"rgba(255,61,0,.12)",
@@ -23,10 +24,6 @@ function Mb({on,children}){return <button onClick={on} style={{padding:"3px 9px"
 function Sl({v,set,c}){return <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1,height:5,borderRadius:3,background:X.b,position:"relative",cursor:"pointer"}} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();set(+Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)).toFixed(2))}}><div style={{height:"100%",borderRadius:3,background:c,width:`${v*100}%`}}/><div style={{position:"absolute",top:-4,left:`calc(${v*100}% - 7px)`,width:14,height:14,borderRadius:"50%",background:c,border:`2px solid ${X.s}`}}/></div><span style={{fontSize:13,fontWeight:800,minWidth:32,textAlign:"right",color:c}}>{v}</span></div>}
 function Tog({on,ck}){return <div onClick={ck} style={{width:38,height:20,borderRadius:10,cursor:"pointer",background:on?X.a:X.m,position:"relative",flexShrink:0}}><div style={{width:14,height:14,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:on?21:3,transition:"left .2s"}}/></div>}
 
-const mkE=()=>Array.from({length:24},(_,i)=>({h:`${String(i).padStart(2,"0")}:00`,lk:~~(Math.random()*200+50),rt:~~(Math.random()*60+10)}));
-const mkV=()=>{const d=[];let f={};ST.forEach(s=>f[s]=.5);for(let i=1;i<=14;i++){const e={g:`G${i}`};ST.forEach(s=>{f[s]=Math.max(.05,Math.min(1,f[s]+(Math.random()-.4)*.15));e[s]=+f[s].toFixed(3)});d.push(e)}return d};
-const mkW=()=>{const r=ST.map(()=>Math.random()*.4+.1),s=r.reduce((a,b)=>a+b);return ST.map((st,i)=>({nm:st,v:+(r[i]/s).toFixed(3),f:+(Math.random()*.6+.3).toFixed(3)}))};
-const P0=["🎯 $SOL alpha: momentum. Vol +34%. 👀","Whales loaded 2M $BONK.","POV: Sold $WIF at $0.80 💀","📊 Solana DeFi TVL $8B.","🐋 500K $SOL moved.","🚀 $CLAW 120K mcap. DYOR 👀","CT grief: Buying more 🫡"].map((c,i)=>({id:`t${i}`,tp:["POST","REPLY","QUOTE","POST"][i%4],ct:c,lk:~~(Math.random()*300+20),rt:~~(Math.random()*80),tm:`${12+i}:${String(i*7%60).padStart(2,"0")}`,st:ST[i%ST.length]}));
 const SK0=[
   {id:"s1",nm:"Market Analysis",on:true,bi:true,ic:"📊",ct:"analysis",ds:"Token price/volume analysis"},
   {id:"s2",nm:"Alpha Generator",on:true,bi:true,ic:"🎯",ct:"content",ds:"Market insight posts"},
@@ -39,8 +36,7 @@ const SK0=[
   {id:"s9",nm:"Thread Weaver",on:false,bi:false,ic:"🧵",ct:"content",ds:"Multi-tweet threads"},
   {id:"s10",nm:"Raid Coordinator",on:false,bi:false,ic:"⚔️",ct:"engagement",ds:"Strategic replies"},
 ];
-const TK0=[{sym:"SOL",mint:"So11...112",pr:187.42,ch:4.2},{sym:"BONK",mint:"DezX...263",pr:0.0000234,ch:-2.1},{sym:"WIF",mint:"EKpQ...jm",pr:1.87,ch:12.4}];
-const AC0=[{id:"a1",nm:"ClawAgent",hd:"@ClawAgentAI",av:"🦀",on:true},{id:"a2",nm:"MoltBot Alpha",hd:"@MoltBotAlpha",av:"🧬",on:false}];
+const EMPTY_WT=ST.map((nm)=>({nm,v:0,f:0}));
 const normAc=(a={})=>({
   id:a.id||`a${Date.now()}`,
   nm:a.nm??a.name??"",
@@ -49,13 +45,13 @@ const normAc=(a={})=>({
   on:typeof a.on==="boolean"?a.on:!!a.isActive,
 });
 
-export default function ClawDashboard() {
-  const ws = useAgentSocket();
+export default function ClawDashboard({ token, wallet, onLogout, adminMode }) {
+  const ws = useAgentSocket(token);
   const live = ws.connected;
 
-  const [ag,sAg]=useState({run:false,cy:247,pt:18,rt:34,fl:2847,fd:42,er:3.72,gn:14});
-  const [eD]=useState(mkE),[vD]=useState(mkV),[wt]=useState(mkW);
-  const [ps,sPs]=useState(P0),[tk,sTk]=useState(TK0),[sk,sSk]=useState(SK0),[ac,sAc]=useState(AC0);
+  const [ag,sAg]=useState({run:false,cy:0,pt:0,rt:0,fl:0,fd:0,er:0,gn:0});
+  const [eD,sED]=useState([]),[vD,sVD]=useState([]),[wt,sWt]=useState(EMPTY_WT);
+  const [ps,sPs]=useState([]),[tk,sTk]=useState([]),[sk,sSk]=useState(SK0),[ac,sAc]=useState([]);
   const [tab,sTab]=useState("overview");
   const [dr,sDr]=useState(""),[pT,sPT]=useState("POST"),[pOk,sPOk]=useState(false),[rTo,sRTo]=useState("");
   const [mP,sMP]=useState([]),[showAI,sShowAI]=useState(false),[aiPr,sAiPr]=useState(""),[aiSt,sAiSt]=useState("meme"),[gn,sGn]=useState(false);
@@ -66,26 +62,146 @@ export default function ClawDashboard() {
   const [sAA,sSAA]=useState(false),[nAc,sNAc]=useState({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});
   const [sF,sSF]=useState("all"),[csn,sCsn]=useState("");
   const [sched,setSched]=useState({postsPerHour:3,maxPostsPerDay:50,replyDelay:30,quietStart:4,quietEnd:8,autoImage:true,evoInterval:60});
-  const [lg,sLg]=useState([{t:"14:32",m:"🔄 Cycle 247",k:"i"},{t:"14:32",m:"📝 Posted $SOL alpha",k:"o"},{t:"14:31",m:"⛓️ Whale: 500K SOL",k:"w"},{t:"14:30",m:"🧬 MoltBot Gen 14",k:"i"}]);
+  const [lg,sLg]=useState([]);
   const [cmdToast,sCmdToast]=useState("");
+  const [issueBanner,sIssueBanner]=useState(null);
+  const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0.3,influencer:0.5,celebrity:1},platformFeePercent:0.1,platformFeeWallet:"EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2",paidPlans:{}});
+  const [billing,setBilling]=useState({firstPaymentRequired:false,paidOnce:false,amountSol:0.5,feeWallet:"",oneTimeOnly:true,reason:"",txSignature:null,isAdmin:!!adminMode});
+  const [txSig,setTxSig]=useState("");
+  const [subTxSig,setSubTxSig]=useState("");
+  const [pendingPlan,setPendingPlan]=useState("");
   const nw=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
   const lg_=(m,k="i")=>sLg(p=>[{t:nw(),m,k},...p.slice(0,60)]);
   const cmd_=(m)=>{sCmdToast(m);setTimeout(()=>sCmdToast(""),2200)};
+  const issue_=(text,tone="warn")=>sIssueBanner({text,tone});
+  const isAdmin = !!billing?.isAdmin || !!adminMode;
+  const sendOrWarn=(type,data={})=>{
+    const ok = ws.send(type,data);
+    cmd_(ok?`Sent ${type}`:`Failed ${type}`);
+    if(!ok)lg_("⚠️ Backend not connected","w");
+    return ok;
+  };
+
+  const randomPool = useMemo(()=>({
+    meme:[
+      {content:"CT mood: one green candle and everyone becomes a macro genius 😂",prompt:"dank crypto meme panel, neon terminal, bullish chaos"},
+      {content:"POV: you sold then it pumps 40% in 6 minutes",prompt:"funny trader reaction meme, cyberpunk chart spike"},
+    ],
+    "alpha-card":[
+      {content:"Alpha: watch volume expansion before price confirmation. Momentum > narratives.",prompt:"clean alpha card, dark UI, orange accent, token metrics"},
+      {content:"Setups this week: trend continuation + liquidity sweep reclaim.",prompt:"professional trading alpha card, minimal modern"},
+    ],
+    chart:[
+      {content:"Chart watch: reclaim, retest, expansion. Invalidation below local support.",prompt:"candlestick chart card, support resistance lines, dark trading screen"},
+      {content:"Structure update: higher-low intact; break above resistance unlocks continuation.",prompt:"technical analysis chart image, breakout zone highlighted"},
+    ],
+    "degen-art":[
+      {content:"Degen pulse check: risk-on, sleep-off, conviction maxed.",prompt:"degen crypto art, glitch, neon orange crab mascot"},
+      {content:"If volatility is a language, we are fluent.",prompt:"surreal degen trading artwork, chaotic but premium"},
+    ],
+  }),[]);
+
+  const genRandomPost=()=>{
+    const bucket = randomPool[aiSt] || randomPool.meme;
+    const pick = bucket[Math.floor(Math.random()*bucket.length)];
+    sPT("POST");
+    sDr(pick.content);
+    sAiPr(pick.prompt);
+    sShowAI(true);
+    lg_(`🎲 Random ${aiSt} draft generated`,`o`);
+  };
+
+  const mapRuntime=(agentState, performance)=>{
+    const engagementRaw = performance?.engagementRate ?? agentState?.performance?.engagementRate ?? 0;
+    const er = +(engagementRaw > 1 ? engagementRaw : engagementRaw * 100).toFixed(2);
+    return {
+      run: !!agentState?.isRunning,
+      cy: agentState?.currentCycle ?? 0,
+      pt: agentState?.postsToday ?? 0,
+      rt: agentState?.repliesThisHour ?? 0,
+      fl: performance?.followers ?? 0,
+      fd: performance?.followerDelta ?? 0,
+      er,
+      gn: Math.max(1, Math.floor((agentState?.currentCycle ?? 0) / 10) + 1),
+    };
+  };
+
+  const updateStrategyViews=(activeStrategies=[],er=0,cycle=0)=>{
+    const active = new Set(activeStrategies||[]);
+    const activeCount = Math.max(1, active.size);
+    const nextWt = ST.map((name)=>{
+      const isActive = active.has(name);
+      const v = isActive ? +(1/activeCount).toFixed(3) : 0;
+      const f = isActive ? +Math.max(0.1,Math.min(1,er/100)).toFixed(3) : 0;
+      return {nm:name,v,f};
+    });
+    sWt(nextWt);
+    const row = { g:`G${Math.max(1,Math.floor(cycle/10)+1)}` };
+    nextWt.forEach((item)=>{ row[item.nm] = item.f; });
+    sVD((prev)=>[...prev.slice(-13),row]);
+  };
+
+  const applySkillStates=(states)=>{
+    if(!states) return;
+    sSk((prev)=>prev.map((item)=>({ ...item, on: states[item.id] ?? item.on })));
+  };
+
+  const mapTokens=(tokens=[])=>{
+    if(!Array.isArray(tokens)) return [];
+    return tokens.map((t)=>({
+      sym: t.sym || t.symbol || "???",
+      mint: t.mint || "",
+      pr: Number(t.pr ?? t.price ?? 0),
+      ch: Number(t.ch ?? t.change24h ?? 0),
+    }));
+  };
+
+  useEffect(()=>{
+    const bootstrap = async ()=>{
+      try{
+        const r = await authFetch(`/api/state`);
+        if(!r.ok) return;
+        const d = await r.json();
+        const runtime = mapRuntime(d.state,d.performance);
+        sAg(runtime);
+        if(Array.isArray(d.accounts)){
+          sAc(d.accounts.map((x)=>{
+            const n = normAc(x);
+            return { ...n, on: d.activeAccountId ? n.id===d.activeAccountId : n.on };
+          }));
+        }
+        applySkillStates(d.skillStates);
+        sTk(mapTokens(d.tokens));
+        if(d.subscription) setSubscription(d.subscription);
+        if(d.billing) setBilling(d.billing);
+        updateStrategyViews(d.state?.activeStrategies||[], runtime.er, runtime.cy);
+      }catch{}
+    };
+    bootstrap();
+  },[]);
 
   // ── WS event listeners ──
   useEffect(()=>{
     const u=[
       ws.on("init",d=>{
-        sAg(s=>({
-          ...s,
-          ...(d.agentState||{}),
-          run: typeof d.isRunning === "boolean" ? d.isRunning : !!d.agentState?.isRunning,
-        }));
+        const runtime = mapRuntime(d.agentState,d.performance);
+        sAg(runtime);
         if(d.accounts){const aa=d.activeAccountId;sAc(d.accounts.map(x=>{const n=normAc(x);return {...n,on:aa?n.id===aa:n.on}}))}
+        applySkillStates(d.skillStates);
+        sTk(mapTokens(d.tokens));
+        if(d.subscription) setSubscription(d.subscription);
+        if(d.billing) setBilling(d.billing);
+        updateStrategyViews(d.agentState?.activeStrategies||[], runtime.er, runtime.cy);
         lg_("🔌 Connected","o")
       }),
-      ws.on("agent:state",d=>sAg(s=>({...s,...d}))),
-      ws.on("agent:started",d=>{sAg(s=>({...s,run:true,...d}));cmd_("Ack agent:started");lg_("▶ Agent started","o")}),
+      ws.on("agent:state",d=>{
+        const runtime = mapRuntime(d,d.performance);
+        sAg(runtime);
+        if(d.tokens) sTk(mapTokens(d.tokens));
+        sED(prev=>[...prev.slice(-23),{h:nw(),lk:Math.round(runtime.er||0),rt:runtime.rt||0}]);
+        updateStrategyViews(d.activeStrategies||[], runtime.er, runtime.cy);
+      }),
+      ws.on("agent:started",d=>{const runtime=mapRuntime(d,d?.performance);sAg(runtime);cmd_("Ack agent:started");lg_("▶ Agent started","o")}),
       ws.on("agent:stopped",()=>{sAg(s=>({...s,run:false}));cmd_("Ack agent:stopped");lg_("⏹ Stopped","w")}),
       ws.on("agent:cycle",d=>{sAg(s=>({...s,cy:d.cycle||s.cy+1}));lg_(`🔄 Cycle ${d.cycle}`)}),
       ws.on("agent:post",d=>{sPs(p=>[{id:`ws${Date.now()}`,tp:d.type||"POST",ct:d.content,lk:0,rt:0,tm:nw(),st:d.strategy||"auto"},...p]);lg_(`📝 ${d.content?.slice(0,45)}...`,"o")}),
@@ -93,104 +209,168 @@ export default function ClawDashboard() {
       ws.on("agent:evolution",d=>lg_(`🧬 ${d.message||"Evolution complete"}`)),
       ws.on("agent:onchain",d=>lg_(`⛓️ ${d.summary||d.type}`,"w")),
       ws.on("agent:image",d=>lg_(`🖼️ AutoImg: ${d.style}`,"o")),
-      ws.on("agent:error",d=>lg_(`❌ ${d.message}`,"w")),
+      ws.on("agent:error",d=>{
+        const msg = String(d?.message||"Unknown agent error");
+        lg_(`❌ ${msg}`,"w");
+        if(/creditsdepleted|credits depleted|credits/i.test(msg)){
+          issue_("X API credits depleted. Add credits in console.x.com to resume posting.","warn");
+        }else if(/unsupported authentication|oauth/i.test(msg)){
+          issue_("X authentication mismatch. Verify API key/secret + access token/secret + bearer token are correct for this account.","warn");
+        }else{
+          issue_(msg,"warn");
+        }
+      }),
       ws.on("agent:metrics",d=>{if(d.engagement)sAg(s=>({...s,er:d.engagement}));if(d.followers)sAg(s=>({...s,fl:d.followers}))}),
-      ws.on("post:sent",d=>lg_(`✅ Delivered`,"o")),
+      ws.on("post:sent",d=>{sPs(p=>[{id:`ms${Date.now()}`,tp:d.type||"POST",ct:d.content,lk:0,rt:0,tm:nw(),st:"manual"},...p]);lg_(`✅ Delivered`,"o")}),
       ws.on("post:queued",()=>lg_("📋 Queued","o")),
       ws.on("personality:updated",()=>lg_("🎭 Personality synced","o")),
-      ws.on("skill:toggled",d=>lg_(`🔧 ${d.enabled?"ON":"OFF"}: ${d.skillId}`,d.enabled?"o":"w")),
+      ws.on("skill:toggled",d=>{applySkillStates(d.skillStates);sSk(p=>p.map(x=>x.id===d.skillId?{...x,on:!!d.enabled}:x));lg_(`🔧 ${d.enabled?"ON":"OFF"}: ${d.skillId}`,d.enabled?"o":"w")}),
       ws.on("token:added",d=>{sTk(p=>[...p,{sym:d.symbol||"???",mint:d.mint,pr:0,ch:0}]);lg_(`📌 +$${d.symbol}`,"o")}),
       ws.on("token:removed",d=>{sTk(p=>p.filter(t=>t.mint!==d.mint));lg_("🗑️ Token removed","w")}),
-      ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...normAc(a),on:a.id===d.accountId})));cmd_("Ack account:switched");lg_("🔄 Account switched","o")}),
+      ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...normAc(a),on:a.id===d.accountId})));applySkillStates(d.skillStates);cmd_("Ack account:switched");lg_("🔄 Account switched","o")}),
       ws.on("account:added",d=>{const na=normAc(d);sAc(p=>[...p,na]);lg_(`➕ ${na.nm||na.hd||"Account"}`,"o")}),
       ws.on("account:removed",d=>{sAc(p=>p.filter(a=>a.id!==d.accountId));lg_("🗑️ Account removed","w")}),
+      ws.on("payment:required",d=>{setBilling((prev)=>({...prev,...d,firstPaymentRequired:true}));issue_("One-time 0.5 SOL payment required before adding your first account.","warn");}),
+      ws.on("subscription:payment-required",d=>{setPendingPlan(d.plan||"");issue_(d.message||"Plan payment required before upgrade.","warn")}),
       ws.on("image:generated",d=>{sMP(p=>[...p,{t:"image",url:d.url}].slice(0,4));lg_("🖼️ Generated","o");sGn(false)}),
-      ws.on("image:error",d=>{lg_(`❌ ImgGen: ${d.message}`,"w");sGn(false)}),
+      ws.on("image:error",d=>{
+        const msg = String(d?.message||"Image generation failed");
+        lg_(`❌ ImgGen: ${msg}`,"w");
+        if(/openai/i.test(msg)){
+          issue_("OpenAI image generation failed. Check OPENAI_API_KEY in backend environment.","warn");
+        }else if(/stability/i.test(msg)){
+          issue_("Stability image generation failed. Check STABILITY_API_KEY in backend environment.","warn");
+        }else if(/replicate/i.test(msg)){
+          issue_("Replicate image generation failed. Check REPLICATE_API_TOKEN in backend environment.","warn");
+        }else if(/no image provider configured/i.test(msg)){
+          issue_("No image provider configured. Set one of OPENAI_API_KEY, STABILITY_API_KEY, or REPLICATE_API_TOKEN.","warn");
+        }else{
+          issue_(msg,"warn");
+        }
+        sGn(false)
+      }),
       ws.on("config:updated",()=>lg_("⚙️ Config synced","o")),
+      ws.on("subscription:updated",d=>{setSubscription(s=>({...s,plan:d.plan,limits:d.limits||s.limits}));if(d.schedule){setSched(s=>({...s,postsPerHour:d.schedule.postsPerHour,maxPostsPerDay:d.schedule.maxPostsPerDay||s.maxPostsPerDay}))}setPendingPlan("");setSubTxSig("");lg_(`💳 Plan: ${d.plan}`,"o")}),
     ];
     return ()=>u.forEach(fn=>fn?.());
   },[ws.on]);
 
-  // Demo tick — only when NOT connected
-  useEffect(()=>{if(live)return;const iv=setInterval(()=>{sAg(s=>({...s,cy:s.cy+1,er:+Math.max(.5,Math.min(8,s.er+(Math.random()-.48)*.08)).toFixed(2)}));sTk(p=>p.map(t=>({...t,pr:+(t.pr*(1+(Math.random()-.5)*.004)).toPrecision(6),ch:+(t.ch+(Math.random()-.5)*.3).toFixed(1)})))},5e3);return()=>clearInterval(iv)},[live]);
-
-  // ── Actions (all wired to WS when live, local fallback in demo) ──
+  // ── Actions (backend only) ──
   const hF=e=>{const f=Array.from(e.target.files||[]).slice(0,4-mP.length).map(f=>({t:f.type.startsWith("video/")?"video":"image",url:URL.createObjectURL(f),file:f}));sMP(p=>[...p,...f].slice(0,4))};
 
   const genAI=async()=>{if(!aiPr.trim())return;sGn(true);lg_(`🖼️ Generating ${aiSt}...`);
-    if(live){ws.send("image:generate",{prompt:aiPr,style:aiSt});sAiPr("");return}
-    await new Promise(r=>setTimeout(r,1200));
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="#101118" width="200" height="200"/><rect fill="#ff3d0022" x="10" y="10" width="180" height="180" rx="8"/><text fill="#ff3d00" font-family="monospace" font-size="11" x="50%" y="45%" text-anchor="middle">AI Generated</text><text fill="#5f6280" font-family="monospace" font-size="9" x="50%" y="58%" text-anchor="middle">${aiSt}</text></svg>`;
-    sMP(p=>[...p,{t:"image",url:`data:image/svg+xml,${encodeURIComponent(svg)}`}].slice(0,4));lg_(`🖼️ Done (${aiSt})`,"o");sGn(false);sAiPr("")};
+    if(!sendOrWarn("image:generate",{prompt:aiPr,style:aiSt})){sGn(false);return}
+    sAiPr("");
+  };
 
   const sendP=async()=>{if(!dr.trim()||dr.length>280)return;
+    if(!live){lg_("⚠️ Connect backend first","w");return}
     let mediaIds=[];
-    if(mP.length>0&&live){
+    if(mP.length>0){
       try{const fd=new FormData();mP.forEach(m=>{if(m.file)fd.append("files",m.file)});
-        const r=await fetch(`${API_URL}/api/media/upload`,{method:"POST",body:fd});
+        const r=await authFetch(`/api/media/upload`,{method:"POST",body:fd});
         const d=await r.json();mediaIds=d.files?.map(f=>f.id)||[];
       }catch(e){lg_(`❌ Upload: ${e}`,"w")}
     }
-    if(live){ws.send("post:send",{content:dr,type:pT,replyToId:rTo||undefined,mediaIds})}
-    sPs(p=>[{id:`m${Date.now()}`,tp:pT,ct:dr,lk:0,rt:0,tm:nw(),st:"manual",md:mP.length?mP.map(m=>({t:m.t})):null},...p]);
+    sendOrWarn("post:send",{content:dr,type:pT,replyToId:rTo||undefined,mediaIds});
     lg_(`📤 ${pT}${rTo?` → ${rTo.slice(0,12)}...`:""}${mP.length?` +${mP.length}📷`:""}: ${dr.slice(0,40)}...`,"o");
-    sAg(s=>({...s,pt:s.pt+1}));sDr("");sRTo("");sMP([]);sPOk(true);setTimeout(()=>sPOk(false),3e3)};
+    sDr("");sRTo("");sMP([]);sPOk(true);setTimeout(()=>sPOk(false),3e3)};
 
   const toggleAgent=()=>{
-    if(live){
-      const cmd = ag.run?"agent:stop":"agent:start";
-      const ok = ws.send(cmd);
-      cmd_(ok?`Sent ${cmd}`:`Failed ${cmd}`);
-      lg_(ok?(ag.run?"⏹ Stopping...":"▶ Starting..."):"⚠️ Not connected to backend","w");
-      return;
-    }
-    sAg(s=>({...s,run:!s.run}));
-    lg_(ag.run?"⏹ Stopping...":"▶ Starting...");
+    const cmd = ag.run?"agent:stop":"agent:start";
+    const ok = sendOrWarn(cmd);
+    lg_(ok?(ag.run?"⏹ Stopping...":"▶ Starting..."):"⚠️ Not connected to backend","w");
   };
 
   const savePe=()=>{
-    if(live){ws.send("personality:update",{tone:pe.tone,humor:pe.hm,aggression:pe.ag,techDepth:pe.td,emojiDensity:pe.ed,slangLevel:pe.sl,catchphrases:pe.cp,topics:pe.tp,avoidTopics:pe.av})}
+    if(!sendOrWarn("personality:update",{tone:pe.tone,humor:pe.hm,aggression:pe.ag,techDepth:pe.td,emojiDensity:pe.ed,slangLevel:pe.sl,catchphrases:pe.cp,topics:pe.tp,avoidTopics:pe.av}))return;
     sSv(true);setTimeout(()=>sSv(false),3e3);lg_(`🎭 Saved: ${pe.tone}`,"o");
   };
 
   const togSk=(s)=>{
     sSk(p=>p.map(x=>x.id===s.id?{...x,on:!x.on}:x));
-    if(live){ws.send("skill:toggle",{skillId:s.id,enabled:!s.on})}
+    sendOrWarn("skill:toggle",{skillId:s.id,enabled:!s.on});
     lg_(`🔧 ${s.on?"OFF":"ON"}: ${s.nm}`,s.on?"w":"o");
   };
 
   const addTk=()=>{if(!nM.trim())return;
     const sym=nS||nM.slice(0,4).toUpperCase();
-    if(live){ws.send("token:add",{mint:nM,symbol:sym})}
-    else{sTk(p=>[...p,{sym,mint:nM,pr:0,ch:0}])}
+    if(!sendOrWarn("token:add",{mint:nM,symbol:sym}))return;
     lg_(`📌 +$${sym}`,"o");sNM("");sNS("")};
 
   const rmTk=(t)=>{
-    if(live){ws.send("token:remove",{mint:t.mint})}
-    else{sTk(p=>p.filter(x=>x.mint!==t.mint))}
+    sendOrWarn("token:remove",{mint:t.mint});
     lg_(`🗑️ -$${t.sym}`,"w")};
 
   const swAc=(a)=>{
-    if(live){
-      const ok = ws.send("account:switch",{accountId:a.id});
-      cmd_(ok?"Sent account:switch":"Failed account:switch");
-    }
-    else{sAc(p=>p.map(x=>({...x,on:x.id===a.id})))}
+    if(!sendOrWarn("account:switch",{accountId:a.id}))return;
     lg_(`🔄 → ${a.nm}`,"o")};
 
   const addAc=()=>{if(!nAc.nm||!nAc.hd)return;
-    if(live){ws.send("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt})}
-    else{sAc(p=>[...p,{id:`a${Date.now()}`,nm:nAc.nm,hd:nAc.hd,av:"🤖",on:false}])}
+    if(!sendOrWarn("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt}))return;
     lg_(`➕ ${nAc.nm}`,"o");sNAc({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});sSAA(false)};
 
+  const verifyPayment=async()=>{
+    if(isAdmin){
+      setBilling((prev)=>({...prev,paidOnce:true,firstPaymentRequired:false,txSignature:"admin-bypass",isAdmin:true}));
+      return;
+    }
+    if(!txSig.trim()) return;
+    try{
+      const r = await authFetch(`/api/billing/verify-first-payment`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({txSignature:txSig.trim()})});
+      const d = await r.json();
+      if(!r.ok){
+        issue_(d.error||"Payment verification failed","warn");
+        return;
+      }
+      setBilling((prev)=>({...prev,paidOnce:true,firstPaymentRequired:false,txSignature:d.txSignature}));
+      setTxSig("");
+      issue_("Payment verified. First account unlocked. Future account additions are free.","warn");
+    }catch(e){
+      issue_(String(e),"warn");
+    }
+  };
+
+  const pickPlan=(plan)=>{
+    if(plan===subscription.plan) return;
+    if(plan==="free"||isAdmin){
+      sendOrWarn("subscription:update",{plan});
+      return;
+    }
+    setPendingPlan(plan);
+    issue_(`Pay ${subscription.pricingSol?.[plan]||0} SOL and include mandatory ${Math.round((subscription.platformFeePercent||0.1)*100)}% fee to ${subscription.platformFeeWallet}. Then verify below.`,"warn");
+  };
+
+  const verifySubscriptionPayment=async()=>{
+    if(isAdmin){
+      if(pendingPlan){
+        sendOrWarn("subscription:update",{plan:pendingPlan});
+      }
+      return;
+    }
+    if(!pendingPlan||!subTxSig.trim()) return;
+    try{
+      const r = await authFetch(`/api/billing/verify-subscription-payment`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan:pendingPlan,txSignature:subTxSig.trim()})});
+      const d = await r.json();
+      if(!r.ok){
+        issue_(d.error||"Subscription payment verification failed","warn");
+        return;
+      }
+      sendOrWarn("subscription:update",{plan:pendingPlan});
+      setSubscription(s=>({...s,paidPlans:{...(s.paidPlans||{}),[pendingPlan]:d.txSignature||"verified"}}));
+      setSubTxSig("");
+    }catch(e){
+      issue_(String(e),"warn");
+    }
+  };
+
   const rmAc=(a)=>{
-    if(live){ws.send("account:remove",{accountId:a.id})}
-    else{sAc(p=>p.filter(x=>x.id!==a.id))}
+    sendOrWarn("account:remove",{accountId:a.id});
     lg_("🗑️ Removed","w")};
 
   const addSk=()=>{if(!csn.trim())return;
     const sk={id:`c${Date.now()}`,nm:csn,on:true,bi:false,ic:"🔌",ct:"custom",ds:"Custom"};
-    if(live){ws.send("skill:register",{name:csn,description:"Custom skill"})}
+    if(!sendOrWarn("skill:register",{name:csn,description:"Custom skill"}))return;
     sSk(p=>[...p,sk]);lg_(`🔧 +${csn}`,"o");sCsn("")};
 
   const cc=dr.length,co=cc>280;
@@ -200,19 +380,21 @@ export default function ClawDashboard() {
   const TABS=[{id:"overview",i:"📊"},{id:"compose",i:"✏️"},{id:"personality",i:"🎭"},{id:"skills",i:"🔧"},{id:"tokens",i:"💰"},{id:"accounts",i:"👤"},{id:"settings",i:"⚙️"},{id:"evolution",i:"🧬"},{id:"feed",i:"📡"}];
 
   return (
-    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace"}}>
+    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:1.15}}>
       {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
+      {issueBanner&&<div style={{position:"fixed",top:40,right:12,zIndex:999,padding:"8px 10px",borderRadius:6,background:X.s,border:`1px solid ${X.y}66`,color:X.y,fontSize:11,fontWeight:700,maxWidth:520,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1}}>{issueBanner.text}</span><button onClick={()=>sIssueBanner(null)} style={{border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:4,fontSize:10,padding:"2px 6px",cursor:"pointer"}}>x</button></div>}
       <header style={{position:"sticky",top:0,zIndex:50,background:`${X.b}f0`,borderBottom:`1px solid ${X.bd}`,backdropFilter:"blur(20px)"}}>
-        <div style={{maxWidth:1480,margin:"0 auto",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{maxWidth:1840,margin:"0 auto",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:24,fontWeight:900,background:`linear-gradient(135deg,${X.a},${X.as})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🦀 CLAW</span>
             <span style={{fontSize:8,color:X.d,letterSpacing:4}}>COMMAND CENTER</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             {aA&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.bd}`,fontSize:9}}><span>{aA.av}</span><span style={{fontWeight:700}}>{aA.nm}</span><span style={{color:X.d}}>{aA.hd}</span></div>}
+            {wallet&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,fontSize:9,color:X.d}}>{wallet.slice(0,4)}...{wallet.slice(-4)} {isAdmin&&<span style={{padding:"1px 6px",borderRadius:3,background:X.cd,color:X.c,fontSize:8,fontWeight:800}}>ADMIN</span>} <button onClick={()=>{clearAuth();onLogout?.();}} style={{marginLeft:6,border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:3,padding:"1px 5px",fontSize:8,cursor:"pointer"}}>Logout</button></div>}
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:3,background:live?X.gd:X.yd}}>
               <div style={{width:5,height:5,borderRadius:"50%",background:live?X.g:X.y}}/>
-              <span style={{fontSize:8,color:live?X.g:X.y,fontWeight:700}}>{live?"LIVE":"DEMO"}</span>
+              <span style={{fontSize:8,color:live?X.g:X.y,fontWeight:700}}>{live?"LIVE":"OFFLINE"}</span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:3,background:ag.run?X.gd:X.rd}}>
               <div style={{width:5,height:5,borderRadius:"50%",background:ag.run?X.g:X.r}}/>
@@ -221,12 +403,12 @@ export default function ClawDashboard() {
             <Bt on={toggleAgent} c={ag.run?X.r:X.g} sm>{ag.run?"⏹":"▶"}</Bt>
           </div>
         </div>
-        <div style={{maxWidth:1480,margin:"0 auto",padding:"0 20px",display:"flex",overflowX:"auto"}}>
+        <div style={{maxWidth:1840,margin:"0 auto",padding:"0 20px",display:"flex",overflowX:"auto"}}>
           {TABS.map(t=><button key={t.id} onClick={()=>sTab(t.id)} style={{padding:"7px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap",background:tab===t.id?X.ag:"transparent",color:tab===t.id?X.a:X.d,borderBottom:tab===t.id?`2px solid ${X.a}`:"2px solid transparent"}}>{t.i} {t.id}</button>)}
         </div>
       </header>
 
-      <main style={{maxWidth:1480,margin:"0 auto",padding:"14px 20px 50px"}}>
+      <main style={{maxWidth:1840,margin:"0 auto",padding:"14px 20px 50px"}}>
 
         {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:8}}>
@@ -247,8 +429,9 @@ export default function ClawDashboard() {
               <div style={{position:"relative"}}><textarea value={dr} onChange={e=>sDr(e.target.value)} placeholder="What's happening..." rows={4} style={{width:"100%",padding:11,borderRadius:5,background:X.b,border:`1px solid ${co?X.r:dr?X.a:X.bd}`,color:X.t,fontFamily:"inherit",fontSize:12,lineHeight:1.6,resize:"vertical",outline:"none",boxSizing:"border-box"}}/><span style={{position:"absolute",bottom:8,right:10,fontSize:9,fontWeight:600,color:co?X.r:cc>240?X.y:X.d}}>{cc}/280</span></div>
               {mP.length>0&&<div style={{display:"flex",gap:6,marginTop:6}}>{mP.map((m,i)=><div key={i} style={{position:"relative",width:64,height:64,borderRadius:5,overflow:"hidden",border:`1px solid ${X.bd}`}}>{m.t==="video"?<div style={{width:"100%",height:"100%",background:X.s,display:"flex",alignItems:"center",justifyContent:"center"}}>🎬</div>:<img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}<button onClick={()=>sMP(p=>p.filter((_,j)=>j!==i))} style={{position:"absolute",top:1,right:1,width:14,height:14,borderRadius:"50%",border:"none",background:X.r,color:"#fff",fontSize:7,cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div>)}</div>}
               <div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}><input ref={fR} type="file" multiple accept="image/*,video/*" onChange={hF} style={{display:"none"}}/><Mb on={()=>fR.current?.click()}>📷 Media</Mb><Mb on={()=>sShowAI(s=>!s)}>🖼️ AI {showAI?"▾":"▸"}</Mb><span style={{fontSize:7,color:X.d}}>{mP.length}/4</span></div>
+              <div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}><Mb on={genRandomPost}>🎲 Random {aiSt}</Mb></div>
               {showAI&&<div style={{marginTop:6,padding:10,borderRadius:5,background:X.b,border:`1px solid ${X.bd}`}}><div style={{display:"flex",gap:3,marginBottom:6,flexWrap:"wrap"}}>{["meme","alpha-card","chart","degen-art"].map(s=><button key={s} onClick={()=>sAiSt(s)} style={{padding:"3px 8px",borderRadius:3,border:`1px solid ${aiSt===s?X.a:X.bd}`,background:aiSt===s?X.ag:"transparent",color:aiSt===s?X.a:X.d,fontFamily:"inherit",fontSize:8,cursor:"pointer"}}>{s}</button>)}</div><div style={{display:"flex",gap:5}}><input value={aiPr} onChange={e=>sAiPr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&genAI()} placeholder="Describe..." style={{flex:1,padding:"6px 8px",borderRadius:3,background:X.s,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:10,outline:"none"}}/><Bt on={genAI} dis={!aiPr.trim()||gn} c={X.p} sm>{gn?"⏳":"✨"}</Bt></div></div>}
-              <div style={{display:"flex",gap:6,marginTop:8}}><Bt on={sendP} dis={!dr.trim()||co||(pT!=="POST"&&!rTo.trim())} c={X.a}>🚀 SEND {pT}</Bt><Bt on={()=>{if(!dr.trim())return;if(live)ws.send("post:queue",{content:dr,type:pT,replyToId:rTo||undefined});lg_("📋 Queued");sDr("");sRTo("")}} dis={!dr.trim()||co} gh>📋</Bt></div>
+                <div style={{display:"flex",gap:6,marginTop:8}}><Bt on={sendP} dis={!dr.trim()||co||(pT!=="POST"&&!rTo.trim())} c={X.a}>🚀 SEND {pT}</Bt><Bt on={()=>{if(!dr.trim())return;if(!sendOrWarn("post:queue",{content:dr,type:pT,replyToId:rTo||undefined}))return;lg_("📋 Queued");sDr("");sRTo("")}} dis={!dr.trim()||co} gh>📋</Bt></div>
               {pT!=="POST"&&!rTo.trim()&&<div style={{marginTop:4,fontSize:8,color:X.y}}>⚠️ Enter a tweet ID to {pT.toLowerCase()}</div>}
               {pOk&&<div style={{marginTop:6,padding:"5px 10px",borderRadius:3,background:X.gd,color:X.g,fontSize:10,fontWeight:600}}>✅ Sent!</div>}
             </Cd>
@@ -284,7 +467,16 @@ export default function ClawDashboard() {
         </div>}
 
         {tab==="accounts"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Cd ti="👤 ACCOUNTS">{ac.map(a=>{const A=normAc(a);return <div key={A.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:7,background:A.on?X.ag:X.b,border:`1px solid ${A.on?X.a+"55":X.bd}`,marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:"50%",background:A.on?`linear-gradient(135deg,${X.a},${X.as})`:X.s,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:`2px solid ${A.on?X.a:X.bd}`}}>{A.av}</div><div><div style={{fontSize:13,fontWeight:700}}>{A.nm||"Unnamed account"}</div><div style={{fontSize:10,color:X.d}}>{A.hd||"@unknown"}</div></div>{A.on&&<Tg c={X.g} bg={X.gd}>ACTIVE</Tg>}</div><div style={{display:"flex",gap:5}}>{!A.on&&<Bt on={()=>swAc(A)} c={X.a} sm>Switch</Bt>}<button onClick={()=>rmAc(A)} style={{padding:"4px 8px",borderRadius:3,border:`1px solid ${X.r}44`,background:X.rd,color:X.r,fontSize:8,cursor:"pointer",fontWeight:700}}>Remove</button></div></div>})}</Cd>
+          <Cd ti="👤 ACCOUNTS">{ac.map(a=>{const A=normAc(a);return <div key={A.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:7,background:A.on?X.ag:X.b,border:`1px solid ${A.on?X.a+"55":X.bd}`,marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:"50%",background:A.on?`linear-gradient(135deg,${X.a},${X.as})`:X.s,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:`2px solid ${A.on?X.a:X.bd}`}}>{A.av}</div><div><div style={{fontSize:13,fontWeight:700}}>{A.nm||"Unnamed account"}</div><div style={{fontSize:10,color:X.d}}>{A.hd||"@unknown"}</div></div>{A.on&&<Tg c={X.g} bg={X.gd}>ACTIVE</Tg>}</div><div style={{display:"flex",gap:5}}>{!A.on&&<Bt on={()=>swAc(A)} c={X.a} sm>Switch</Bt>}<button onClick={()=>rmAc(A)} style={{padding:"4px 8px",borderRadius:3,border:`1px solid ${X.r}44`,background:X.rd,color:X.r,fontSize:8,cursor:"pointer",fontWeight:700}}>Remove</button></div></div>})}
+          {billing.firstPaymentRequired&&!isAdmin&&<div style={{marginTop:8,padding:12,borderRadius:6,background:X.yd,border:`1px solid ${X.y}66`,color:X.y}}>
+            <div style={{fontSize:10,fontWeight:800,marginBottom:4}}>One-time setup payment required</div>
+            <div style={{fontSize:9,lineHeight:1.6}}>Pay <b>{billing.amountSol} SOL</b> to <b>{billing.feeWallet}</b>. This is one-time only. Future account additions are free, and the fee is used for hosting your agent.</div>
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              <input value={txSig} onChange={e=>setTxSig(e.target.value)} placeholder="Paste SOL transaction signature" style={{...IS,flex:1}}/>
+              <Bt on={verifyPayment} c={X.y} sm>Verify</Bt>
+            </div>
+          </div>}
+          </Cd>
           {!sAA?<div onClick={()=>sSAA(true)} style={{padding:12,borderRadius:7,border:`1px dashed ${X.bd}`,textAlign:"center",color:X.d,fontSize:11,cursor:"pointer"}}>+ Add Agent Account</div>
           :<Cd ti="➕ NEW ACCOUNT"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div><div style={{fontSize:7,color:X.d,marginBottom:2}}>AGENT NAME</div><input value={nAc.nm} onChange={e=>sNAc(p=>({...p,nm:e.target.value}))} placeholder="MyAgent" style={IS}/></div>
@@ -299,14 +491,28 @@ export default function ClawDashboard() {
 
         {tab==="settings"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
           <Cd ti="⚙️ POST SCHEDULE">
+            <div style={{marginBottom:14,padding:10,borderRadius:5,background:X.b,border:`1px solid ${X.bd}`}}>
+              <div style={{fontSize:8,color:X.d,marginBottom:6,letterSpacing:1.2}}>SUBSCRIPTION PLAN</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["free","starter","influencer","celebrity"].map((plan)=><button key={plan} onClick={()=>pickPlan(plan)} style={{padding:"5px 10px",borderRadius:4,border:`1px solid ${subscription.plan===plan?X.a:X.bd}`,background:subscription.plan===plan?X.ag:"transparent",color:subscription.plan===plan?X.a:X.d,fontFamily:"inherit",fontSize:9,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>{plan}</button>)}</div>
+              <div style={{fontSize:8,color:X.d,marginTop:6}}>Pricing: Free 0 SOL · Starter {subscription.pricingSol?.starter ?? 0.3} SOL · Influencer {subscription.pricingSol?.influencer ?? 0.5} SOL · Celebrity {subscription.pricingSol?.celebrity ?? 1} SOL</div>
+              <div style={{fontSize:8,color:X.d,marginTop:4}}>Mandatory platform fee: {Math.round((subscription.platformFeePercent||0.1)*100)}% to {subscription.platformFeeWallet}</div>
+              <div style={{fontSize:8,color:X.d,marginTop:6}}>Limits: {subscription.limits.maxPostsPerHour}/hr, {subscription.limits.maxPostsPerDay}/day</div>
+              {!!pendingPlan&&pendingPlan!=="free"&&!isAdmin&&<div style={{marginTop:8,padding:8,borderRadius:5,background:X.yd,border:`1px solid ${X.y}66`,color:X.y}}>
+                <div style={{fontSize:8,marginBottom:5}}>Pending upgrade: <b>{pendingPlan}</b> ({subscription.pricingSol?.[pendingPlan]||0} SOL)</div>
+                <div style={{display:"flex",gap:6}}>
+                  <input value={subTxSig} onChange={e=>setSubTxSig(e.target.value)} placeholder="Paste subscription payment tx signature" style={{...IS,flex:1}}/>
+                  <Bt on={verifySubscriptionPayment} c={X.y} sm>Verify & Apply</Bt>
+                </div>
+              </div>}
+            </div>
             <div style={{marginBottom:16}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:9,color:X.d,letterSpacing:1}}>POSTS PER HOUR</span><span style={{fontSize:18,fontWeight:800,color:X.a}}>{sched.postsPerHour}</span></div>
-              <input type="range" min={1} max={12} value={sched.postsPerHour} onChange={e=>setSched(s=>({...s,postsPerHour:+e.target.value}))} style={{width:"100%",accentColor:X.a}}/>
+              <input type="range" min={1} max={subscription.limits.maxPostsPerHour||1} value={sched.postsPerHour} onChange={e=>setSched(s=>({...s,postsPerHour:+e.target.value}))} style={{width:"100%",accentColor:X.a}}/>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:7,color:X.m}}><span>1/hr (conservative)</span><span>12/hr (aggressive)</span></div>
             </div>
             <div style={{marginBottom:16}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:9,color:X.d,letterSpacing:1}}>MAX POSTS PER DAY</span><span style={{fontSize:18,fontWeight:800,color:X.c}}>{sched.maxPostsPerDay}</span></div>
-              <input type="range" min={5} max={200} step={5} value={sched.maxPostsPerDay} onChange={e=>setSched(s=>({...s,maxPostsPerDay:+e.target.value}))} style={{width:"100%",accentColor:X.c}}/>
+              <input type="range" min={1} max={subscription.limits.maxPostsPerDay||10} step={1} value={sched.maxPostsPerDay} onChange={e=>setSched(s=>({...s,maxPostsPerDay:+e.target.value}))} style={{width:"100%",accentColor:X.c}}/>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:7,color:X.m}}><span>5/day</span><span>200/day</span></div>
             </div>
             <div style={{marginBottom:16}}>
@@ -354,7 +560,7 @@ export default function ClawDashboard() {
             </Cd>
             <Cd ti="💾 APPLY">
               <Bt on={()=>{
-                if(live){ws.send("config:update",{schedule:{postsPerHour:sched.postsPerHour,maxPostsPerDay:sched.maxPostsPerDay,replyDelayMs:sched.replyDelay*1000,quietHoursUTC:[sched.quietStart,sched.quietEnd]},moltBot:{evolutionInterval:sched.evoInterval*60000},autoImage:sched.autoImage})}
+                if(!sendOrWarn("config:update",{schedule:{postsPerHour:sched.postsPerHour,maxPostsPerDay:sched.maxPostsPerDay,replyDelayMs:sched.replyDelay*1000,quietHoursUTC:[sched.quietStart,sched.quietEnd]},moltBot:{evolutionInterval:sched.evoInterval*60000},autoImage:sched.autoImage}))return;
                 lg_(`⚙️ Config: ${sched.postsPerHour}/hr, max ${sched.maxPostsPerDay}/day, quiet ${sched.quietStart}-${sched.quietEnd} UTC`,"o");
               }} c={X.a}>💾 SAVE SETTINGS</Bt>
               <div style={{marginTop:8,fontSize:8,color:X.d}}>Settings sync to agent in real-time via WebSocket</div>

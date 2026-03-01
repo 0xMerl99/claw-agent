@@ -138,7 +138,7 @@ class TwitterClient {
         });
     }
     // ── INTERNAL: REQUEST HANDLING ─────────────────────────────
-    async request(method, endpoint, body, params) {
+    async request(method, endpoint, body, params, forceOAuth = false) {
         // Rate limit check
         await this.checkRateLimit(endpoint);
         let url = `${this.baseUrl}${endpoint}`;
@@ -147,12 +147,17 @@ class TwitterClient {
             url += `?${qs}`;
         }
         const headers = {
-            Authorization: `Bearer ${this.config.bearerToken}`,
             'Content-Type': 'application/json',
         };
-        // For write operations, use OAuth 1.0a
-        if (method === 'POST' || method === 'DELETE') {
+        const useOAuth = forceOAuth ||
+            method === 'POST' ||
+            method === 'DELETE' ||
+            this.requiresUserContext(endpoint);
+        if (useOAuth) {
             headers.Authorization = this.generateOAuth1Header(method, url);
+        }
+        else {
+            headers.Authorization = `Bearer ${this.config.bearerToken}`;
         }
         const options = { method, headers };
         if (body)
@@ -161,7 +166,15 @@ class TwitterClient {
         // Update rate limit state
         this.updateRateLimit(endpoint, response.headers);
         if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
+            const rawBody = await response.text().catch(() => '');
+            let error = {};
+            try {
+                error = rawBody ? JSON.parse(rawBody) : {};
+            }
+            catch {
+                error = { raw: rawBody };
+            }
+            console.error(`❌ [Twitter ${method} ${endpoint}] ${response.status}`, error);
             if (response.status === 429) {
                 // Rate limited — queue and retry
                 const resetAt = parseInt(response.headers.get('x-rate-limit-reset') || '0') * 1000;
@@ -169,6 +182,13 @@ class TwitterClient {
                 console.log(`⏳ [Twitter] Rate limited on ${endpoint}. Waiting ${waitMs / 1000}s`);
                 await this.sleep(waitMs);
                 return this.request(method, endpoint, body, params);
+            }
+            const isUnsupportedAuth = response.status === 403 &&
+                (error?.type === 'https://api.twitter.com/2/problems/unsupported-authentication' ||
+                    String(error?.title || '').toLowerCase().includes('unsupported authentication'));
+            if (isUnsupportedAuth && !useOAuth) {
+                console.warn(`↩️ [Twitter] Retrying ${method} ${endpoint} with OAuth 1.0a user context`);
+                return this.request(method, endpoint, body, params, true);
             }
             throw new TwitterApiError(response.status, error);
         }
@@ -184,8 +204,18 @@ class TwitterClient {
             headers,
             body: new URLSearchParams(body).toString(),
         });
-        if (!response.ok)
-            throw new TwitterApiError(response.status, await response.json());
+        if (!response.ok) {
+            const rawBody = await response.text().catch(() => '');
+            let error = {};
+            try {
+                error = rawBody ? JSON.parse(rawBody) : {};
+            }
+            catch {
+                error = { raw: rawBody };
+            }
+            console.error(`❌ [Twitter V1 ${method}] ${response.status}`, error);
+            throw new TwitterApiError(response.status, error);
+        }
         return response.json();
     }
     // ── RATE LIMITING ──────────────────────────────────────────
@@ -268,6 +298,11 @@ class TwitterClient {
     }
     sleep(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+    requiresUserContext(endpoint) {
+        if (endpoint === '/users/me')
+            return true;
+        return /^\/users\/.+\/(timelines\/reverse_chronological|mentions|likes|retweets)$/.test(endpoint);
     }
 }
 exports.TwitterClient = TwitterClient;
