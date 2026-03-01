@@ -537,9 +537,26 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
     }
 
     case 'post:send': {
-      if (!user.agent) break;
-      await user.agent.manualPost(msg.data);
-      broadcastToUser(user, 'post:sent', msg.data);
+      try {
+        if (!user.activeConfig) {
+          ws.send(JSON.stringify({ type: 'agent:error', data: { message: 'No active account selected. Add/switch an account first.' } }));
+          break;
+        }
+
+        if (user.agent) {
+          await user.agent.manualPost(msg.data);
+        } else {
+          const tempBot = new ClawdBot(user.activeConfig);
+          await tempBot.manualPost(msg.data);
+        }
+
+        broadcastToUser(user, 'post:sent', msg.data);
+      } catch (error) {
+        ws.send(JSON.stringify({
+          type: 'agent:error',
+          data: { message: `Manual post failed: ${error instanceof Error ? error.message : String(error)}` },
+        }));
+      }
       break;
     }
 
