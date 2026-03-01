@@ -18,8 +18,8 @@
 ## 1. Agent Backend → Render ($7/mo)
 
 Push your repo, create a Web Service:
-- Build: `npm install && npm run build`
-- Start: `node dist/server.js`
+- Build: `npm install`
+- Start: `npx tsx src/server.ts`
 - Health check: `/api/health`
 - Plan: **Starter** ($7/mo) — Free tier sleeps!
 

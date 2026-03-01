@@ -8,14 +8,12 @@ services:
     env: node
     plan: starter
     rootDir: agent
-    buildCommand: npm install && npx tsc
-    startCommand: node dist/server.js
+    buildCommand: npm install
+    startCommand: npx tsx src/server.ts
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "3001"
       - key: DASHBOARD_URL
         sync: false
       - key: TWITTER_API_KEY
