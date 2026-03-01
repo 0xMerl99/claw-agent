@@ -72,7 +72,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [sv,sSv]=useState(false);
   const [nM,sNM]=useState(""),[nS,sNS]=useState("");
   const [sAA,sSAA]=useState(false),[nAc,sNAc]=useState({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});
-  const [sF,sSF]=useState("all"),[csn,sCsn]=useState("");
+  const [sF,sSF]=useState("all");
   const [sched,setSched]=useState({postsPerHour:3,maxPostsPerDay:50,replyDelay:30,quietStart:4,quietEnd:8,autoImage:false,evoInterval:60});
   const [imgCfg,setImgCfg]=useState({
     provider:"openai",
@@ -493,11 +493,6 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
     sendOrWarn("account:remove",{accountId:a.id});
     lg_("🗑️ Removed","w")};
 
-  const addSk=()=>{if(!csn.trim())return;
-    const sk={id:`c${Date.now()}`,nm:csn,on:true,bi:false,ic:"🔌",ct:"custom",ds:"Custom"};
-    if(!sendOrWarn("skill:register",{name:csn,description:"Custom skill"}))return;
-    sSk(p=>[...p,sk]);lg_(`🔧 +${csn}`,"o");sCsn("")};
-
   const cc=dr.length,co=cc>280;
   const rd=[{s:"Humor",v:pe.hm},{s:"Tech",v:pe.td},{s:"Aggro",v:pe.ag},{s:"Emoji",v:pe.ed},{s:"Slang",v:pe.sl}];
   const aA=ac.find(a=>a.on);
@@ -505,7 +500,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const TABS=[{id:"overview",i:"📊"},{id:"compose",i:"✏️"},{id:"personality",i:"🎭"},{id:"skills",i:"🔧"},{id:"tokens",i:"💰"},{id:"accounts",i:"👤"},{id:"settings",i:"⚙️"},{id:"evolution",i:"🧬"},{id:"feed",i:"📡"}];
 
   return (
-    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:isMobile?1:1.25}}>
+    <div style={{background:X.b,color:X.t,height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:isMobile?1:1.25}}>
       {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
       {showConnectModal&&<div style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowConnectModal(false)}>
         <div style={{width:"100%",maxWidth:460,border:`1px solid ${X.bd}`,borderRadius:10,background:X.s,padding:18}} onClick={(e)=>e.stopPropagation()}>
@@ -546,7 +541,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         </div>
       </header>
 
-      <main style={{maxWidth:1840,margin:"0 auto",padding:isMobile?"12px 12px 130px":"14px 20px 95px",position:"relative"}}>
+      <main style={{flex:1,maxWidth:1840,width:"100%",margin:"0 auto",padding:isMobile?"12px 12px 130px":"14px 20px 95px",position:"relative",overflowY:"auto",overflowX:"hidden"}}>
         {!walletConnected&&<button onClick={()=>setShowConnectModal(true)} style={{position:"absolute",inset:0,zIndex:20,border:"none",background:"transparent",cursor:"not-allowed"}} aria-label="Connect wallet to unlock dashboard" />}
 
         {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -595,9 +590,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
 
         {tab==="skills"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:6}}><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>🔧 TOTAL</div><div style={{fontSize:24,fontWeight:800}}>{sk.length}</div></Cd><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>✅ ON</div><div style={{fontSize:24,fontWeight:800,color:X.g}}>{sk.filter(s=>s.on).length}</div></Cd><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>⏸ OFF</div><div style={{fontSize:24,fontWeight:800,color:X.d}}>{sk.filter(s=>!s.on).length}</div></Cd></div>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["all","analysis","content","media","engagement","custom"].map(f=><button key={f} onClick={()=>sSF(f)} style={{padding:"3px 10px",borderRadius:3,border:`1px solid ${sF===f?X.a:X.bd}`,background:sF===f?X.ag:"transparent",color:sF===f?X.a:X.d,fontFamily:"inherit",fontSize:8,fontWeight:600,cursor:"pointer",textTransform:"uppercase"}}>{f}</button>)}</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["all","analysis","content","media","engagement"].map(f=><button key={f} onClick={()=>sSF(f)} style={{padding:"3px 10px",borderRadius:3,border:`1px solid ${sF===f?X.a:X.bd}`,background:sF===f?X.ag:"transparent",color:sF===f?X.a:X.d,fontFamily:"inherit",fontSize:8,fontWeight:600,cursor:"pointer",textTransform:"uppercase"}}>{f}</button>)}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>{fSk.map(s=><div key={s.id} style={{background:X.s,border:`1px solid ${s.on?X.a+"33":X.bd}`,borderRadius:7,padding:"12px 14px",opacity:s.on?1:.5}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:18}}>{s.ic}</span><div><div style={{fontSize:11,fontWeight:700}}>{s.nm}</div><div style={{display:"flex",gap:3,marginTop:2}}>{s.bi&&<Tg c={X.c} bg={X.cd}>CORE</Tg>}<Tg c={X.d} bg={X.b}>{s.ct}</Tg></div></div></div><Tog on={s.on} ck={()=>togSk(s)}/></div><div style={{fontSize:9,color:X.d,lineHeight:1.5}}>{s.ds}</div></div>)}</div>
-          <Cd ti="🔌 ADD SKILL"><div style={{display:"flex",gap:6,alignItems:"end"}}><div style={{flex:1}}><div style={{fontSize:7,color:X.d,marginBottom:2}}>NAME</div><input value={csn} onChange={e=>sCsn(e.target.value)} placeholder="my-skill" style={IS}/></div><Bt on={addSk} dis={!csn.trim()} c={X.a} sm>+ Add</Bt></div></Cd>
         </div>}
 
         {tab==="tokens"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
