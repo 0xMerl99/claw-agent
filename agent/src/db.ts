@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { LowSync } from 'lowdb';
 import { JSONFileSync } from 'lowdb/node';
@@ -37,14 +38,35 @@ function resolveDbFilePath(): string {
   return path.resolve(process.cwd(), 'data', 'claw-db.json');
 }
 
+function ensureWritableDbPath(preferredPath: string): string {
+  const candidates = [
+    preferredPath,
+    path.resolve(process.cwd(), 'data', 'claw-db.json'),
+    path.join(os.tmpdir(), 'claw-db.json'),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, JSON.stringify(DEFAULT_DB));
+      }
+      fs.accessSync(filePath, fs.constants.R_OK | fs.constants.W_OK);
+      return filePath;
+    } catch {
+    }
+  }
+
+  throw new Error(`No writable DB location found. Checked: ${candidates.join(', ')}`);
+}
+
 let dbInstance: LowSync<DbSchema> | null = null;
 
 function getDb(): LowSync<DbSchema> {
   if (dbInstance) return dbInstance;
 
-  const filePath = resolveDbFilePath();
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const filePath = ensureWritableDbPath(resolveDbFilePath());
 
   const adapter = new JSONFileSync<DbSchema>(filePath);
   const db = new LowSync<DbSchema>(adapter, DEFAULT_DB);
