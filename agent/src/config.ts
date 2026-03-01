@@ -48,6 +48,14 @@ export interface AgentConfig {
     replyDelayMs: number;
     engagementWindowHours: number;
     quietHoursUTC: [number, number];  // e.g., [4, 8] = 4am-8am UTC
+    autoImage?: boolean;
+  };
+
+  // User-owned image generation provider
+  image?: {
+    provider: 'openai' | 'stability' | 'replicate';
+    apiKey?: string;
+    keys?: Partial<Record<'openai' | 'stability' | 'replicate', string>>;
   };
 }
 
@@ -86,6 +94,7 @@ export const DEFAULT_CONFIG: Partial<AgentConfig> = {
     replyDelayMs: 30_000,
     engagementWindowHours: 2,
     quietHoursUTC: [4, 8],
+    autoImage: false,
   },
   moltBot: {
     evolutionInterval: 3_600_000, // 1 hour

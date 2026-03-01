@@ -1,9 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+const CONTRACT_ADDRESS = 'EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2';
 
 export default function LandingPage() {
+  const [copied, setCopied] = useState(false);
+
+  const copyContract = async () => {
+    try {
+      await navigator.clipboard.writeText(CONTRACT_ADDRESS);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#07080c', color: '#e4e4ec', fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '56px 20px 72px' }}>
+        {copied && (
+          <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, padding: '8px 12px', borderRadius: 6, background: '#101118', border: '1px solid #00e67666', color: '#00e676', fontSize: 12, fontWeight: 700 }}>
+            Copied
+          </div>
+        )}
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 999, border: '1px solid #1c1e30', color: '#9aa0bb', fontSize: 11, marginBottom: 14 }}>
             Solana-auth AI Agent Platform
@@ -18,6 +37,20 @@ export default function LandingPage() {
         <div style={{ display: 'flex', gap: 10, marginBottom: 26, flexWrap: 'wrap' }}>
           <a href="/dashboard" style={{ padding: '11px 18px', borderRadius: 8, background: '#ff3d00', color: '#fff', textDecoration: 'none', fontWeight: 800 }}>Open Dashboard</a>
           <a href="/docs" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#c2c5dd', textDecoration: 'none', fontWeight: 700 }}>Read Docs</a>
+          <a href="https://x.com" target="_blank" rel="noreferrer" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#9aa0bb', textDecoration: 'none', fontWeight: 700 }}>X.com</a>
+          <a href="https://github.com" target="_blank" rel="noreferrer" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#9aa0bb', textDecoration: 'none', fontWeight: 700 }}>GitHub</a>
+        </div>
+
+        <div style={{ marginBottom: 14, padding: 18, borderRadius: 10, border: '1px solid #1c1e30', background: '#0f1119' }}>
+          <div style={{ fontSize: 13, color: '#fff', marginBottom: 8, fontWeight: 800 }}>Solana Contract Address</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 280, padding: '9px 10px', borderRadius: 6, border: '1px solid #1c1e30', background: '#07080c', color: '#9aa0bb', fontSize: 12, wordBreak: 'break-all' }}>
+              {CONTRACT_ADDRESS}
+            </div>
+            <button onClick={copyContract} style={{ padding: '10px 14px', borderRadius: 6, border: 'none', background: '#ff3d00', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>
+              Copy
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>

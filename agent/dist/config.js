@@ -27,6 +27,7 @@ exports.DEFAULT_CONFIG = {
         replyDelayMs: 30_000,
         engagementWindowHours: 2,
         quietHoursUTC: [4, 8],
+        autoImage: false,
     },
     moltBot: {
         evolutionInterval: 3_600_000, // 1 hour

@@ -15,6 +15,7 @@ export default function WalletGate({ adminMode = false }) {
       const res = await loginWithWallet();
       setToken(res.token);
       setWallet(res.wallet);
+      setError('');
     } catch (e) {
       setError(String(e));
     } finally {

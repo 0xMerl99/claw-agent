@@ -33,6 +33,11 @@ export interface AgentConfig {
         replyDelayMs: number;
         engagementWindowHours: number;
         quietHoursUTC: [number, number];
+        autoImage?: boolean;
+    };
+    image?: {
+        provider: 'openai' | 'stability' | 'replicate';
+        apiKey: string;
     };
 }
 export interface PersonalityProfile {

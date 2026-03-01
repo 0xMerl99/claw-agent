@@ -116,6 +116,34 @@ const DEFAULT_SKILL_STATES: Record<string, boolean> = {
   s10: false,
 };
 
+type ImageProvider = 'openai' | 'stability' | 'replicate';
+
+function normalizeProvider(raw: any): ImageProvider {
+  const provider = String(raw || '').toLowerCase();
+  if (provider === 'stability' || provider === 'replicate') return provider;
+  return 'openai';
+}
+
+function normalizeImageConfig(image: any): { provider: ImageProvider; keys: Partial<Record<ImageProvider, string>> } {
+  const provider = normalizeProvider(image?.provider);
+  const keys: Partial<Record<ImageProvider, string>> = {};
+
+  const rawKeys = image?.keys;
+  if (rawKeys && typeof rawKeys === 'object') {
+    (['openai', 'stability', 'replicate'] as ImageProvider[]).forEach((name) => {
+      const value = String((rawKeys as any)[name] || '').trim();
+      if (value) keys[name] = value;
+    });
+  }
+
+  const legacyApiKey = String(image?.apiKey || '').trim();
+  if (legacyApiKey && !keys[provider]) {
+    keys[provider] = legacyApiKey;
+  }
+
+  return { provider, keys };
+}
+
 const users = new Map<string, UserSession>();
 const challenges = new Map<string, AuthChallenge>();
 const tokens = new Map<string, AuthToken>();
@@ -231,11 +259,13 @@ function clampForPlan(plan: Plan, schedule: any) {
   const limits = PLAN_LIMITS[plan];
   const postsPerHour = Math.max(1, Math.min(Number(schedule.postsPerHour || 1), limits.maxPostsPerHour));
   const maxPostsPerDay = Math.max(1, Math.min(Number(schedule.maxPostsPerDay || limits.maxPostsPerDay), limits.maxPostsPerDay));
+  const autoImage = !!schedule.autoImage;
 
   return {
     ...schedule,
     postsPerHour,
     maxPostsPerDay,
+    autoImage,
   };
 }
 
@@ -257,12 +287,16 @@ function broadcastToUser(user: UserSession, type: string, data: any) {
 
 function getStatePayload(user: UserSession) {
   const active = getActiveAccount(user);
+  const imageCfg = normalizeImageConfig(active?.config?.image);
   return {
     agentState: user.agent?.getState() || null,
     performance: user.agent?.getPerformance() || null,
     tokens: user.agent?.getTrackedTokens?.() || [],
     accounts: user.accounts.map(sanitizeAccount),
     activeAccountId: user.activeAccountId,
+    schedule: active?.config?.schedule || null,
+    imageProvider: imageCfg.provider || null,
+    hasImageApiKey: !!imageCfg.keys[imageCfg.provider],
     skillStates: active?.skillStates || DEFAULT_SKILL_STATES,
     isRunning: user.agent?.getState()?.isRunning || false,
     subscription: {
@@ -291,7 +325,11 @@ function createAccount(data: any, plan: Plan): AgentAccount {
     replyDelayMs: 30000,
     engagementWindowHours: 2,
     quietHoursUTC: [4, 8] as [number, number],
+    autoImage: false,
   });
+
+  const imageProvider = normalizeProvider(data.imageProvider);
+  const imageApiKey = String(data.imageApiKey || '').trim();
 
   return {
     id: `acc_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
@@ -327,6 +365,11 @@ function createAccount(data: any, plan: Plan): AgentAccount {
         memoryDepth: 100,
       },
       schedule: cappedSchedule,
+      image: {
+        provider: imageProvider,
+        apiKey: imageApiKey,
+        keys: imageApiKey ? { [imageProvider]: imageApiKey } : {},
+      },
     },
     skillStates: { ...DEFAULT_SKILL_STATES },
     isActive: false,
@@ -574,6 +617,12 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
         break;
       }
 
+      const imageProvider = String(msg.data?.imageProvider || '').toLowerCase();
+      if (imageProvider && !['openai', 'stability', 'replicate'].includes(imageProvider)) {
+        ws.send(JSON.stringify({ type: 'agent:error', data: { message: 'Invalid image provider. Use openai, stability, or replicate.' } }));
+        break;
+      }
+
       if (user.accounts.length === 0 && !user.paidOnce && !user.isAdmin) {
         ws.send(JSON.stringify({
           type: 'payment:required',
@@ -607,8 +656,44 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
 
     case 'image:generate': {
       try {
-        const result = await imageGen.generate(msg.data.prompt, msg.data.style);
-        ws.send(JSON.stringify({ type: 'image:generated', data: result }));
+        const active = getActiveAccount(user);
+        const imageCfg = normalizeImageConfig(active?.config?.image);
+        const providersInOrder: ImageProvider[] = [
+          imageCfg.provider,
+          ...(['openai', 'stability', 'replicate'] as ImageProvider[]).filter((name) => name !== imageCfg.provider),
+        ];
+        const available = providersInOrder.filter((name) => !!String(imageCfg.keys[name] || '').trim());
+
+        if (available.length === 0) {
+          ws.send(JSON.stringify({
+            type: 'image:error',
+            data: { message: 'Image generation requires your own API key. Set provider + key in your account settings.' },
+          }));
+          break;
+        }
+
+        const failures: string[] = [];
+        let generated: any = null;
+
+        for (const provider of available) {
+          const apiKey = String(imageCfg.keys[provider] || '').trim();
+          try {
+            generated = await imageGen.generate(msg.data.prompt, msg.data.style, { provider, apiKey });
+            break;
+          } catch (error) {
+            failures.push(`${provider}: ${String(error)}`);
+          }
+        }
+
+        if (!generated) {
+          ws.send(JSON.stringify({
+            type: 'image:error',
+            data: { message: `Image generation failed across configured providers. ${failures.join(' | ')}` },
+          }));
+          break;
+        }
+
+        ws.send(JSON.stringify({ type: 'image:generated', data: generated }));
       } catch (e) {
         ws.send(JSON.stringify({ type: 'image:error', data: { message: String(e) } }));
       }
@@ -627,16 +712,37 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
         Object.assign(user.activeConfig.schedule, clampForPlan(user.plan, nextSchedule));
       }
 
+      if (msg.data.image) {
+        const normalized = normalizeImageConfig(user.activeConfig.image);
+        const provider = normalizeProvider(msg.data.image.provider || normalized.provider);
+        const apiKeyRaw = msg.data.image.apiKey;
+        const apiKey = typeof apiKeyRaw === 'string' ? apiKeyRaw.trim() : '';
+
+        if (apiKey) {
+          normalized.keys[provider] = apiKey;
+        }
+
+        user.activeConfig.image = {
+          provider,
+          apiKey: normalized.keys[provider] || '',
+          keys: normalized.keys,
+        };
+      }
+
       if (msg.data.moltBot) {
         Object.assign(user.activeConfig.moltBot, msg.data.moltBot);
       }
 
       persistUserSession(user);
 
+      const normalizedImage = normalizeImageConfig(user.activeConfig.image);
+
       broadcastToUser(user, 'config:updated', {
         ...msg.data,
         subscription: { plan: user.plan, limits },
         schedule: user.activeConfig.schedule,
+        imageProvider: normalizedImage.provider,
+        hasImageApiKey: !!normalizedImage.keys[normalizedImage.provider],
       });
       break;
     }

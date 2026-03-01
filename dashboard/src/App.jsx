@@ -23,6 +23,7 @@ const X = { ...DARK_THEME };
 const ST = ["market-alpha","meme-post","engage-reply","shill","on-chain"];
 const SC = ["#ff3d00","#00e5ff","#d500f9","#ffd600","#00e676"];
 const IS = {width:"100%",padding:"8px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:11,outline:"none",boxSizing:"border-box"};
+const CONTRACT_ADDRESS = "EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2";
 
 function Cd({ti,children}){return <div style={{background:X.s,border:`1px solid ${X.bd}`,borderRadius:8,padding:"14px 16px"}}>{ti&&<div style={{fontSize:8,fontWeight:700,color:X.d,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10}}>{ti}</div>}{children}</div>}
 function Tg({c,bg,children}){return <span style={{fontSize:7,fontWeight:800,padding:"2px 6px",borderRadius:3,background:bg,color:c,textTransform:"uppercase"}}>{children}</span>}
@@ -70,9 +71,10 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [pe,sPe]=useState({tone:"hybrid",hm:.7,ag:.3,td:.6,ed:.4,sl:.6,cp:["wagmi","gm","stay clawed in"],tp:["solana","defi","memecoins","ai-agents"],av:["politics"],_c:"",_t:"",_a:""});
   const [sv,sSv]=useState(false);
   const [nM,sNM]=useState(""),[nS,sNS]=useState("");
-  const [sAA,sSAA]=useState(false),[nAc,sNAc]=useState({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});
+  const [sAA,sSAA]=useState(false),[nAc,sNAc]=useState({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:"",imgProvider:"openai",imgKey:""});
   const [sF,sSF]=useState("all"),[csn,sCsn]=useState("");
-  const [sched,setSched]=useState({postsPerHour:3,maxPostsPerDay:50,replyDelay:30,quietStart:4,quietEnd:8,autoImage:true,evoInterval:60});
+  const [sched,setSched]=useState({postsPerHour:3,maxPostsPerDay:50,replyDelay:30,quietStart:4,quietEnd:8,autoImage:false,evoInterval:60});
+  const [imgCfg,setImgCfg]=useState({provider:"openai",apiKey:"",hasStoredKey:false});
   const [lg,sLg]=useState([]);
   const [cmdToast,sCmdToast]=useState("");
   const [issueBanner,sIssueBanner]=useState(null);
@@ -81,11 +83,56 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [txSig,setTxSig]=useState("");
   const [subTxSig,setSubTxSig]=useState("");
   const [pendingPlan,setPendingPlan]=useState("");
+  const [viewportWidth,setViewportWidth]=useState(typeof window !== "undefined" ? window.innerWidth : 1280);
+  const [solPrice,setSolPrice]=useState(null);
+  const prevWalletConnectedRef = useRef(walletConnected);
+  const isTablet = viewportWidth < 1100;
+  const isMobile = viewportWidth < 760;
+  const copyContract=async()=>{
+    try{
+      await navigator.clipboard.writeText(CONTRACT_ADDRESS);
+      cmd_("Copied");
+    }catch{
+      issue_("Failed to copy contract address","warn");
+    }
+  };
+
+  useEffect(()=>{
+    const onResize=()=>setViewportWidth(window.innerWidth);
+    window.addEventListener("resize",onResize);
+    return ()=>window.removeEventListener("resize",onResize);
+  },[]);
+
+  useEffect(()=>{
+    let active = true;
+    const loadSolPrice = async ()=>{
+      try{
+        const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
+        if(!response.ok) return;
+        const data = await response.json();
+        const price = Number(data?.solana?.usd);
+        if(active && Number.isFinite(price)) setSolPrice(price);
+      }catch{}
+    };
+    loadSolPrice();
+    const id = setInterval(loadSolPrice, 30000);
+    return ()=>{ active = false; clearInterval(id); };
+  },[]);
+
   useEffect(()=>{ localStorage.setItem("claw_theme",theme); },[theme]);
+  useEffect(()=>{
+    if(walletConnected) setShowConnectModal(false);
+  },[walletConnected]);
   const nw=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
   const lg_=(m,k="i")=>sLg(p=>[{t:nw(),m,k},...p.slice(0,60)]);
   const cmd_=(m)=>{sCmdToast(m);setTimeout(()=>sCmdToast(""),2200)};
   const issue_=(text,tone="warn")=>sIssueBanner({text,tone});
+  useEffect(()=>{
+    if(walletConnected && !prevWalletConnectedRef.current){
+      cmd_("Wallet connected");
+    }
+    prevWalletConnectedRef.current = walletConnected;
+  },[walletConnected]);
   const isAdmin = !!billing?.isAdmin;
   const guardWallet=()=>{
     if(walletConnected) return true;
@@ -190,6 +237,22 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         }
         applySkillStates(d.skillStates);
         sTk(mapTokens(d.tokens));
+        if(d.schedule){
+          setSched(s=>({
+            ...s,
+            postsPerHour:d.schedule.postsPerHour ?? s.postsPerHour,
+            maxPostsPerDay:d.schedule.maxPostsPerDay ?? s.maxPostsPerDay,
+            replyDelay:Math.max(5,Math.round((d.schedule.replyDelayMs ?? s.replyDelay*1000)/1000)),
+            quietStart:Array.isArray(d.schedule.quietHoursUTC)?(d.schedule.quietHoursUTC[0] ?? s.quietStart):s.quietStart,
+            quietEnd:Array.isArray(d.schedule.quietHoursUTC)?(d.schedule.quietHoursUTC[1] ?? s.quietEnd):s.quietEnd,
+            autoImage:!!d.schedule.autoImage,
+          }));
+        }
+        setImgCfg((prev)=>({
+          ...prev,
+          provider:d.imageProvider || prev.provider,
+          hasStoredKey:!!d.hasImageApiKey,
+        }));
         if(d.subscription) setSubscription(d.subscription);
         if(d.billing) setBilling(d.billing);
         updateStrategyViews(d.state?.activeStrategies||[], runtime.er, runtime.cy);
@@ -207,6 +270,22 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         if(d.accounts){const aa=d.activeAccountId;sAc(d.accounts.map(x=>{const n=normAc(x);return {...n,on:aa?n.id===aa:n.on}}))}
         applySkillStates(d.skillStates);
         sTk(mapTokens(d.tokens));
+        if(d.schedule){
+          setSched(s=>({
+            ...s,
+            postsPerHour:d.schedule.postsPerHour ?? s.postsPerHour,
+            maxPostsPerDay:d.schedule.maxPostsPerDay ?? s.maxPostsPerDay,
+            replyDelay:Math.max(5,Math.round((d.schedule.replyDelayMs ?? s.replyDelay*1000)/1000)),
+            quietStart:Array.isArray(d.schedule.quietHoursUTC)?(d.schedule.quietHoursUTC[0] ?? s.quietStart):s.quietStart,
+            quietEnd:Array.isArray(d.schedule.quietHoursUTC)?(d.schedule.quietHoursUTC[1] ?? s.quietEnd):s.quietEnd,
+            autoImage:!!d.schedule.autoImage,
+          }));
+        }
+        setImgCfg((prev)=>({
+          ...prev,
+          provider:d.imageProvider || prev.provider,
+          hasStoredKey:!!d.hasImageApiKey,
+        }));
         if(d.subscription) setSubscription(d.subscription);
         if(d.billing) setBilling(d.billing);
         updateStrategyViews(d.agentState?.activeStrategies||[], runtime.er, runtime.cy);
@@ -255,20 +334,28 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         const msg = String(d?.message||"Image generation failed");
         lg_(`❌ ImgGen: ${msg}`,"w");
         if(/openai/i.test(msg)){
-          issue_("OpenAI image generation failed. Check OPENAI_API_KEY in backend environment.","warn");
+          issue_("OpenAI image generation failed. Check your account image API key.","warn");
         }else if(/stability/i.test(msg)){
-          issue_("Stability image generation failed. Check STABILITY_API_KEY in backend environment.","warn");
+          issue_("Stability image generation failed. Check your account image API key.","warn");
         }else if(/replicate/i.test(msg)){
-          issue_("Replicate image generation failed. Check REPLICATE_API_TOKEN in backend environment.","warn");
+          issue_("Replicate image generation failed. Check your account image API key.","warn");
         }else if(/no image provider configured/i.test(msg)){
-          issue_("No image provider configured. Set one of OPENAI_API_KEY, STABILITY_API_KEY, or REPLICATE_API_TOKEN.","warn");
+          issue_("No image provider configured. Add your own image provider key in Settings.","warn");
         }else{
           issue_(msg,"warn");
         }
         sGn(false)
       }),
-      ws.on("config:updated",()=>lg_("⚙️ Config synced","o")),
-      ws.on("subscription:updated",d=>{setSubscription(s=>({...s,plan:d.plan,limits:d.limits||s.limits}));if(d.schedule){setSched(s=>({...s,postsPerHour:d.schedule.postsPerHour,maxPostsPerDay:d.schedule.maxPostsPerDay||s.maxPostsPerDay}))}setPendingPlan("");setSubTxSig("");lg_(`💳 Plan: ${d.plan}`,"o")}),
+      ws.on("config:updated",d=>{
+        if(d?.schedule){
+          setSched(s=>({...s,autoImage:!!d.schedule.autoImage}));
+        }
+        if(d?.imageProvider){
+          setImgCfg(s=>({...s,provider:d.imageProvider,hasStoredKey:!!d.hasImageApiKey}));
+        }
+        lg_("⚙️ Config synced","o");
+      }),
+      ws.on("subscription:updated",d=>{setSubscription(s=>({...s,plan:d.plan,limits:d.limits||s.limits}));if(d.schedule){setSched(s=>({...s,postsPerHour:d.schedule.postsPerHour,maxPostsPerDay:d.schedule.maxPostsPerDay||s.maxPostsPerDay,autoImage:!!d.schedule.autoImage}))}setPendingPlan("");setSubTxSig("");lg_(`💳 Plan: ${d.plan}`,"o")}),
     ];
     return ()=>u.forEach(fn=>fn?.());
   },[ws.on]);
@@ -325,8 +412,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
     lg_(`🔄 → ${a.nm}`,"o")};
 
   const addAc=()=>{if(!nAc.nm||!nAc.hd)return;
-    if(!sendOrWarn("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt}))return;
-    lg_(`➕ ${nAc.nm}`,"o");sNAc({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});sSAA(false)};
+    if(!sendOrWarn("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt,imageProvider:nAc.imgProvider,imageApiKey:nAc.imgKey}))return;
+    lg_(`➕ ${nAc.nm}`,"o");sNAc({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:"",imgProvider:"openai",imgKey:""});sSAA(false)};
 
   const verifyPayment=async()=>{
     if(isAdmin){
@@ -398,7 +485,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const TABS=[{id:"overview",i:"📊"},{id:"compose",i:"✏️"},{id:"personality",i:"🎭"},{id:"skills",i:"🔧"},{id:"tokens",i:"💰"},{id:"accounts",i:"👤"},{id:"settings",i:"⚙️"},{id:"evolution",i:"🧬"},{id:"feed",i:"📡"}];
 
   return (
-    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:1.35}}>
+    <div style={{background:X.b,color:X.t,minHeight:"100vh",fontFamily:"'JetBrains Mono','Fira Code',monospace",zoom:isMobile?1:1.25}}>
       {cmdToast&&<div style={{position:"fixed",top:10,right:12,zIndex:1000,padding:"6px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.a}66`,color:X.a,fontSize:10,fontWeight:700,letterSpacing:.5}}>{cmdToast}</div>}
       {showConnectModal&&<div style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowConnectModal(false)}>
         <div style={{width:"100%",maxWidth:460,border:`1px solid ${X.bd}`,borderRadius:10,background:X.s,padding:18}} onClick={(e)=>e.stopPropagation()}>
@@ -420,7 +507,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             {aA&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.s,border:`1px solid ${X.bd}`,fontSize:9}}><span>{aA.av}</span><span style={{fontWeight:700}}>{aA.nm}</span><span style={{color:X.d}}>{aA.hd}</span></div>}
-            {wallet&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,fontSize:9,color:X.d}}>{wallet.slice(0,4)}...{wallet.slice(-4)} {isAdmin&&<span style={{padding:"1px 6px",borderRadius:3,background:X.cd,color:X.c,fontSize:8,fontWeight:800}}>ADMIN</span>} <button onClick={()=>{clearAuth();onLogout?.();}} style={{marginLeft:6,border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:3,padding:"1px 5px",fontSize:8,cursor:"pointer"}}>Logout</button></div>}
+            {wallet&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,fontSize:9,color:X.d}}>{wallet.slice(0,4)}...{wallet.slice(-4)} {isAdmin&&<span style={{padding:"1px 6px",borderRadius:3,background:X.cd,color:X.c,fontSize:8,fontWeight:800}}>ADMIN</span>} <button onClick={()=>{cmd_("Wallet disconnected");setTimeout(()=>{clearAuth();onLogout?.();},250);}} style={{marginLeft:6,border:`1px solid ${X.bd}`,background:"transparent",color:X.d,borderRadius:3,padding:"1px 5px",fontSize:8,cursor:"pointer"}}>Logout</button></div>}
             {!walletConnected&&<Bt on={()=>setShowConnectModal(true)} c={X.a} sm>Connect Wallet</Bt>}
             <Bt on={()=>setTheme(theme==="dark"?"light":"dark")} gh sm>{theme==="dark"?"☀ Light":"🌙 Dark"}</Bt>
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:3,background:live?X.gd:X.yd}}>
@@ -439,21 +526,21 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         </div>
       </header>
 
-      <main style={{maxWidth:1840,margin:"0 auto",padding:"14px 20px 50px",position:"relative"}}>
+      <main style={{maxWidth:1840,margin:"0 auto",padding:isMobile?"12px 12px 130px":"14px 20px 95px",position:"relative"}}>
         {!walletConnected&&<button onClick={()=>setShowConnectModal(true)} style={{position:"absolute",inset:0,zIndex:20,border:"none",background:"transparent",cursor:"not-allowed"}} aria-label="Connect wallet to unlock dashboard" />}
 
         {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:8}}>
             {[{l:"Cycle",v:ag.cy,i:"🔄"},{l:"Posts",v:ag.pt,i:"📝"},{l:"Replies",v:ag.rt,i:"💬"},{l:"Followers",v:ag.fl.toLocaleString(),i:"👥",sub:`+${ag.fd}`,sc:X.g},{l:"Engage",v:`${ag.er}%`,i:"📈"},{l:"Gen",v:`G${ag.gn}`,i:"🧬"}].map((s,i)=><Cd key={i}><div style={{fontSize:8,color:X.d,letterSpacing:2,marginBottom:3}}>{s.i} {s.l}</div><div style={{fontSize:21,fontWeight:800}}>{s.v}{s.sub&&<span style={{fontSize:11,color:s.sc,marginLeft:5}}>{s.sub}</span>}</div></Cd>)}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"5fr 2fr",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:isTablet?"1fr":"5fr 2fr",gap:10}}>
             <Cd ti="ENGAGEMENT 24H"><ResponsiveContainer width="100%" height={165}><AreaChart data={eD}><defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={X.a} stopOpacity={.25}/><stop offset="100%" stopColor={X.a} stopOpacity={0}/></linearGradient></defs><XAxis dataKey="h" tick={{fill:X.d,fontSize:7}} tickLine={false} axisLine={false} interval={3}/><YAxis tick={{fill:X.d,fontSize:7}} tickLine={false} axisLine={false} width={25}/><Tooltip contentStyle={{background:X.s,border:`1px solid ${X.bd}`,borderRadius:4,fontSize:9}}/><Area type="monotone" dataKey="lk" stroke={X.a} fill="url(#gl)" strokeWidth={2}/><Area type="monotone" dataKey="rt" stroke={X.c} fill="none" strokeWidth={1.5}/></AreaChart></ResponsiveContainer></Cd>
             <Cd ti="STRATEGY"><ResponsiveContainer width="100%" height={165}><PieChart><Pie data={wt} dataKey="v" nameKey="nm" cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={3} strokeWidth={0}>{wt.map((_,i)=><Cell key={i} fill={SC[i]}/>)}</Pie></PieChart></ResponsiveContainer></Cd>
           </div>
           <Cd ti="TOKENS"><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>{tk.map((t,i)=><div key={i} style={{padding:"10px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:800}}>${t.sym}</span><Tg c={t.ch>=0?X.g:X.r} bg={t.ch>=0?X.gd:X.rd}>{t.ch>=0?"+":""}{t.ch}%</Tg></div><div style={{fontSize:15,fontWeight:700}}>${t.pr<.01?(+t.pr).toFixed(7):(+t.pr).toFixed(2)}</div></div>)}</div></Cd>
         </div>}
 
-        {tab==="compose"&&<div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:14}}>
+        {tab==="compose"&&<div style={{display:"grid",gridTemplateColumns:isTablet?"1fr":"1fr 260px",gap:14}}>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <Cd ti="✏️ COMPOSE">
               <div style={{display:"flex",gap:5,marginBottom:10}}>{["POST","REPLY","QUOTE"].map(t=><button key={t} onClick={()=>sPT(t)} style={{padding:"6px 13px",borderRadius:4,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,background:pT===t?X.a:X.b,color:pT===t?"#fff":X.d}}>{t}</button>)}</div>
@@ -474,7 +561,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </div>
         </div>}
 
-        {tab==="personality"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        {tab==="personality"&&<div style={{display:"grid",gridTemplateColumns:isTablet?"1fr":"1fr 1fr",gap:14}}>
           <Cd ti="🎭 PERSONALITY">
             <div style={{marginBottom:14}}><div style={{fontSize:8,color:X.d,letterSpacing:1.5,marginBottom:6}}>TONE</div><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["degen","analyst","meme-lord","alpha-hunter","hybrid"].map(t=><button key={t} onClick={()=>sPe(p=>({...p,tone:t}))} style={{padding:"6px 12px",borderRadius:4,border:`1px solid ${pe.tone===t?X.a:X.bd}`,background:pe.tone===t?X.ag:X.b,color:pe.tone===t?X.a:X.d,fontFamily:"inherit",fontSize:9,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>{t}</button>)}</div></div>
             {[{l:"Humor",k:"hm",c:X.y},{l:"Aggression",k:"ag",c:X.r},{l:"Tech Depth",k:"td",c:X.c},{l:"Emoji",k:"ed",c:X.p},{l:"Slang",k:"sl",c:X.as}].map(s=><div key={s.k} style={{marginBottom:12}}><div style={{fontSize:8,color:X.d,letterSpacing:1.5,marginBottom:6}}>{s.l}</div><Sl v={pe[s.k]} set={v=>sPe(p=>({...p,[s.k]:v}))} c={s.c}/></div>)}
@@ -487,7 +574,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         </div>}
 
         {tab==="skills"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>🔧 TOTAL</div><div style={{fontSize:24,fontWeight:800}}>{sk.length}</div></Cd><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>✅ ON</div><div style={{fontSize:24,fontWeight:800,color:X.g}}>{sk.filter(s=>s.on).length}</div></Cd><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>⏸ OFF</div><div style={{fontSize:24,fontWeight:800,color:X.d}}>{sk.filter(s=>!s.on).length}</div></Cd></div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:6}}><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>🔧 TOTAL</div><div style={{fontSize:24,fontWeight:800}}>{sk.length}</div></Cd><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>✅ ON</div><div style={{fontSize:24,fontWeight:800,color:X.g}}>{sk.filter(s=>s.on).length}</div></Cd><Cd><div style={{fontSize:7,color:X.d,marginBottom:2}}>⏸ OFF</div><div style={{fontSize:24,fontWeight:800,color:X.d}}>{sk.filter(s=>!s.on).length}</div></Cd></div>
           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["all","analysis","content","media","engagement","custom"].map(f=><button key={f} onClick={()=>sSF(f)} style={{padding:"3px 10px",borderRadius:3,border:`1px solid ${sF===f?X.a:X.bd}`,background:sF===f?X.ag:"transparent",color:sF===f?X.a:X.d,fontFamily:"inherit",fontSize:8,fontWeight:600,cursor:"pointer",textTransform:"uppercase"}}>{f}</button>)}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>{fSk.map(s=><div key={s.id} style={{background:X.s,border:`1px solid ${s.on?X.a+"33":X.bd}`,borderRadius:7,padding:"12px 14px",opacity:s.on?1:.5}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:18}}>{s.ic}</span><div><div style={{fontSize:11,fontWeight:700}}>{s.nm}</div><div style={{display:"flex",gap:3,marginTop:2}}>{s.bi&&<Tg c={X.c} bg={X.cd}>CORE</Tg>}<Tg c={X.d} bg={X.b}>{s.ct}</Tg></div></div></div><Tog on={s.on} ck={()=>togSk(s)}/></div><div style={{fontSize:9,color:X.d,lineHeight:1.5}}>{s.ds}</div></div>)}</div>
           <Cd ti="🔌 ADD SKILL"><div style={{display:"flex",gap:6,alignItems:"end"}}><div style={{flex:1}}><div style={{fontSize:7,color:X.d,marginBottom:2}}>NAME</div><input value={csn} onChange={e=>sCsn(e.target.value)} placeholder="my-skill" style={IS}/></div><Bt on={addSk} dis={!csn.trim()} c={X.a} sm>+ Add</Bt></div></Cd>
@@ -510,18 +597,20 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </div>}
           </Cd>
           {!sAA?<div onClick={()=>sSAA(true)} style={{padding:12,borderRadius:7,border:`1px dashed ${X.bd}`,textAlign:"center",color:X.d,fontSize:11,cursor:"pointer"}}>+ Add Agent Account</div>
-          :<Cd ti="➕ NEW ACCOUNT"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          :<Cd ti="➕ NEW ACCOUNT"><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8}}>
             <div><div style={{fontSize:7,color:X.d,marginBottom:2}}>AGENT NAME</div><input value={nAc.nm} onChange={e=>sNAc(p=>({...p,nm:e.target.value}))} placeholder="MyAgent" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.d,marginBottom:2}}>X HANDLE</div><input value={nAc.hd} onChange={e=>sNAc(p=>({...p,hd:e.target.value}))} placeholder="@handle" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>API KEY</div><input value={nAc.ak} onChange={e=>sNAc(p=>({...p,ak:e.target.value}))} type="password" placeholder="Twitter API Key" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>API SECRET</div><input value={nAc.as} onChange={e=>sNAc(p=>({...p,as:e.target.value}))} type="password" placeholder="Twitter API Secret" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>ACCESS TOKEN</div><input value={nAc.at} onChange={e=>sNAc(p=>({...p,at:e.target.value}))} type="password" placeholder="Access Token" style={IS}/></div>
             <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>ACCESS TOKEN SECRET</div><input value={nAc.ats} onChange={e=>sNAc(p=>({...p,ats:e.target.value}))} type="password" placeholder="Access Token Secret" style={IS}/></div>
+            <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>IMAGE PROVIDER</div><select value={nAc.imgProvider} onChange={e=>sNAc(p=>({...p,imgProvider:e.target.value}))} style={IS}><option value="openai">OpenAI</option><option value="stability">Stability</option><option value="replicate">Replicate</option></select></div>
+            <div><div style={{fontSize:7,color:X.a,marginBottom:2}}>IMAGE API KEY</div><input value={nAc.imgKey} onChange={e=>sNAc(p=>({...p,imgKey:e.target.value}))} type="password" placeholder="Your image provider API key" style={IS}/></div>
             <div style={{gridColumn:"1/-1"}}><div style={{fontSize:7,color:X.a,marginBottom:2}}>BEARER TOKEN</div><input value={nAc.bt} onChange={e=>sNAc(p=>({...p,bt:e.target.value}))} type="password" placeholder="Bearer Token" style={IS}/></div>
-          </div><div style={{marginTop:8,padding:"8px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,fontSize:8,color:X.d,lineHeight:1.6}}>💡 Get keys from <span style={{color:X.c,fontWeight:700}}>developer.twitter.com</span> → Create App → Keys & Tokens. Need <span style={{color:X.t}}>Read+Write</span>.</div><div style={{display:"flex",gap:6,marginTop:10}}><Bt on={addAc} dis={!nAc.nm||!nAc.hd||!nAc.ak||!nAc.as||!nAc.at||!nAc.ats||!nAc.bt} c={X.g}>✓ Create</Bt><Bt on={()=>sSAA(false)} gh>Cancel</Bt></div></Cd>}
+          </div><div style={{marginTop:8,padding:"8px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,fontSize:8,color:X.d,lineHeight:1.6}}>💡 X keys: <span style={{color:X.c,fontWeight:700}}>developer.twitter.com</span> → Create App → Keys & Tokens (Read+Write).<br/>🖼️ Image key is optional here and only required if Auto Image is enabled.</div><div style={{display:"flex",gap:6,marginTop:10}}><Bt on={addAc} dis={!nAc.nm||!nAc.hd||!nAc.ak||!nAc.as||!nAc.at||!nAc.ats||!nAc.bt} c={X.g}>✓ Create</Bt><Bt on={()=>sSAA(false)} gh>Cancel</Bt></div></Cd>}
         </div>}
 
-        {tab==="settings"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        {tab==="settings"&&<div style={{display:"grid",gridTemplateColumns:isTablet?"1fr":"1fr 1fr",gap:14}}>
           <Cd ti="⚙️ POST SCHEDULE">
             <div style={{marginBottom:14,padding:10,borderRadius:5,background:X.b,border:`1px solid ${X.bd}`}}>
               <div style={{fontSize:8,color:X.d,marginBottom:6,letterSpacing:1.2}}>SUBSCRIPTION PLAN</div>
@@ -566,21 +655,35 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           </Cd>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <Cd ti="🖼️ IMAGE GENERATION">
-              <div style={{fontSize:9,color:X.d,marginBottom:10}}>Provider auto-detects from your API keys. Set in <span style={{color:X.c}}>.env</span></div>
-              {[{name:"OpenAI DALL-E 3",env:"OPENAI_API_KEY",c:"#10a37f",desc:"Best quality, $0.04/img"},{name:"Stability AI",env:"STABILITY_API_KEY",c:"#8b5cf6",desc:"Fast, open models"},{name:"Replicate FLUX",env:"REPLICATE_API_TOKEN",c:"#f97316",desc:"Flexible, pay-per-use"}].map(p=>(
+              <div style={{fontSize:9,color:X.d,marginBottom:10}}>Image generation uses each user's own API key (never platform keys).</div>
+              {[{name:"OpenAI DALL-E 3",env:"openai",c:"#10a37f",desc:"Best quality, pay-per-use"},{name:"Stability AI",env:"stability",c:"#8b5cf6",desc:"Fast, open models"},{name:"Replicate FLUX",env:"replicate",c:"#f97316",desc:"Flexible, pay-per-use"}].map(p=>(
                 <div key={p.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:5,background:X.b,border:`1px solid ${X.bd}`,marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{width:8,height:8,borderRadius:"50%",background:p.c}}/>
                     <div><div style={{fontSize:10,fontWeight:700}}>{p.name}</div><div style={{fontSize:7,color:X.d}}>{p.desc}</div></div>
                   </div>
-                  <div style={{fontSize:8,color:X.d}}>via <span style={{color:X.t,fontWeight:600}}>{p.env}</span></div>
+                  <div style={{fontSize:8,color:X.d}}>provider <span style={{color:X.t,fontWeight:600}}>{p.env}</span></div>
                 </div>
               ))}
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8,marginTop:8}}>
+                <div>
+                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>Provider</div>
+                  <select value={imgCfg.provider} onChange={e=>setImgCfg(s=>({...s,provider:e.target.value}))} style={IS}>
+                    <option value="openai">OpenAI</option>
+                    <option value="stability">Stability</option>
+                    <option value="replicate">Replicate</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:8,color:X.d,marginBottom:4}}>API Key {imgCfg.hasStoredKey&&<span style={{color:X.g}}>(stored)</span>}</div>
+                  <input value={imgCfg.apiKey} onChange={e=>setImgCfg(s=>({...s,apiKey:e.target.value}))} type="password" placeholder={imgCfg.hasStoredKey?"Leave blank to keep current key":"Paste your API key"} style={IS}/>
+                </div>
+              </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8}}>
                 <span style={{fontSize:9,color:X.d}}>Auto-attach images to posts</span>
                 <Tog on={sched.autoImage} ck={()=>setSched(s=>({...s,autoImage:!s.autoImage}))}/>
               </div>
-              <div style={{fontSize:7,color:X.m,marginTop:4}}>When ON, MoltBot decides when images improve engagement</div>
+              <div style={{fontSize:7,color:X.m,marginTop:4}}>Default is OFF. Enable only after adding your own image API key.</div>
             </Cd>
             <Cd ti="🧬 EVOLUTION SETTINGS">
               <div style={{marginBottom:12}}>
@@ -591,7 +694,17 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             </Cd>
             <Cd ti="💾 APPLY">
               <Bt on={()=>{
-                if(!sendOrWarn("config:update",{schedule:{postsPerHour:sched.postsPerHour,maxPostsPerDay:sched.maxPostsPerDay,replyDelayMs:sched.replyDelay*1000,quietHoursUTC:[sched.quietStart,sched.quietEnd]},moltBot:{evolutionInterval:sched.evoInterval*60000},autoImage:sched.autoImage}))return;
+                if(sched.autoImage && !imgCfg.hasStoredKey && !imgCfg.apiKey.trim()){
+                  issue_("Image API key is required only when Auto Image is ON. Add your key or turn Auto Image OFF.","warn");
+                  return;
+                }
+                const payload={
+                  schedule:{postsPerHour:sched.postsPerHour,maxPostsPerDay:sched.maxPostsPerDay,replyDelayMs:sched.replyDelay*1000,quietHoursUTC:[sched.quietStart,sched.quietEnd],autoImage:sched.autoImage},
+                  moltBot:{evolutionInterval:sched.evoInterval*60000},
+                  image: imgCfg.apiKey.trim() ? {provider:imgCfg.provider,apiKey:imgCfg.apiKey.trim()} : {provider:imgCfg.provider},
+                };
+                if(!sendOrWarn("config:update",payload))return;
+                setImgCfg(s=>({...s,apiKey:"",hasStoredKey:true}));
                 lg_(`⚙️ Config: ${sched.postsPerHour}/hr, max ${sched.maxPostsPerDay}/day, quiet ${sched.quietStart}-${sched.quietEnd} UTC`,"o");
               }} c={X.a}>💾 SAVE SETTINGS</Bt>
               <div style={{marginTop:8,fontSize:8,color:X.d}}>Settings sync to agent in real-time via WebSocket</div>
@@ -604,11 +717,25 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>{wt.map((s,i)=><Cd key={i}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:2,background:SC[i]}}/><span style={{fontSize:10,fontWeight:700}}>{s.nm}</span></div><Tg c={s.f>.6?X.g:s.f>.35?X.y:X.r} bg={s.f>.6?X.gd:s.f>.35?X.yd:X.rd}>{s.f}</Tg></div><div style={{height:3,borderRadius:2,background:X.b}}><div style={{height:"100%",borderRadius:2,background:SC[i],width:`${s.f*100}%`}}/></div></Cd>)}</div>
         </div>}
 
-        {tab==="feed"&&<div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:12}}>
+        {tab==="feed"&&<div style={{display:"grid",gridTemplateColumns:isTablet?"1fr":"1fr 260px",gap:12}}>
           <Cd ti="📡 FEED"><div style={{display:"flex",flexDirection:"column",gap:5}}>{ps.map(p=><div key={p.id} style={{padding:"8px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><Tg c={p.st==="manual"?X.y:X.a} bg={(p.st==="manual"?X.y:X.a)+"18"}>{p.st==="manual"?"MANUAL":p.tp}</Tg><span style={{fontSize:6,color:X.m}}>{p.tm}</span></div><div style={{fontSize:9,color:X.t,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{p.ct}</div>{p.md&&<div style={{display:"flex",gap:3,marginTop:4}}>{p.md.map((m,i)=><div key={i} style={{width:24,height:24,borderRadius:3,background:X.s,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,border:`1px solid ${X.bd}`}}>{m.t==="video"?"🎬":"📷"}</div>)}</div>}<div style={{display:"flex",gap:10,marginTop:4,fontSize:7,color:X.d}}>❤️ {p.lk} 🔁 {p.rt}</div></div>)}</div></Cd>
           <Cd ti="LOG"><div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:500,overflowY:"auto",fontSize:7}}>{lg.map((e,i)=><div key={i} style={{padding:"3px 5px",borderRadius:2,background:e.k==="o"?X.gd:e.k==="w"?X.yd:"transparent",color:e.k==="o"?X.g:e.k==="w"?X.y:X.d,borderLeft:`2px solid ${e.k==="o"?X.g:e.k==="w"?X.y:X.bd}`}}><span style={{color:X.m,marginRight:3}}>{e.t}</span>{e.m}</div>)}</div></Cd>
         </div>}
       </main>
+      <footer style={{position:"fixed",left:0,right:0,bottom:0,zIndex:80,background:`${X.b}f2`,borderTop:`1px solid ${X.bd}`,backdropFilter:"blur(12px)"}}>
+        <div style={{maxWidth:1840,margin:"0 auto",padding:isMobile?"8px 12px":"9px 20px",display:"flex",alignItems:isMobile?"flex-start":"center",justifyContent:"space-between",flexDirection:isMobile?"column":"row",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:10,color:X.d}}>
+            <a href="https://x.com" target="_blank" rel="noreferrer" style={{color:X.c,textDecoration:"none",fontWeight:700}}>X.com</a>
+            <span style={{opacity:.6}}>•</span>
+            <a href="https://github.com" target="_blank" rel="noreferrer" style={{color:X.c,textDecoration:"none",fontWeight:700}}>GitHub</a>
+            <span style={{opacity:.6}}>•</span>
+            <span style={{color:X.t,fontWeight:700}}>SOL ${solPrice!==null?solPrice.toFixed(2):"--"}</span>
+          </div>
+          <button onClick={copyContract} style={{border:`1px solid ${X.bd}`,background:X.s,color:X.t,borderRadius:6,padding:isMobile?"7px 10px":"6px 10px",fontFamily:"inherit",fontSize:10,cursor:"pointer",textAlign:"left",maxWidth:isMobile?"100%":"60%",wordBreak:"break-all"}}>
+            {CONTRACT_ADDRESS}
+          </button>
+        </div>
+      </footer>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');*{box-sizing:border-box;margin:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#08090d}::-webkit-scrollbar-thumb{background:#1c1e30;border-radius:2px}textarea::placeholder,input::placeholder{color:#33354a}`}</style>
     </div>
   );

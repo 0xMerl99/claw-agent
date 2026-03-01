@@ -36,44 +36,54 @@ interface ProviderConfig {
   model?: string;
 }
 
+export interface ImageProviderOverride {
+  provider: 'openai' | 'stability' | 'replicate';
+  apiKey: string;
+}
+
 export class ImageGenerator {
   private provider: ProviderConfig;
   private generationCount = 0;
   private cache: Map<string, GeneratedImage> = new Map();
 
   constructor() {
-    // Auto-detect available provider
-    if (process.env.OPENAI_API_KEY) {
-      this.provider = { type: 'openai', apiKey: process.env.OPENAI_API_KEY, model: 'dall-e-3' };
-    } else if (process.env.STABILITY_API_KEY) {
-      this.provider = { type: 'stability', apiKey: process.env.STABILITY_API_KEY };
-    } else if (process.env.REPLICATE_API_TOKEN) {
-      this.provider = { type: 'replicate', apiKey: process.env.REPLICATE_API_TOKEN, model: 'black-forest-labs/flux-1.1-pro' };
-    } else {
-      this.provider = { type: 'openai', apiKey: '' }; // Will fail gracefully
-    }
+    this.provider = { type: 'openai', apiKey: '' };
   }
 
   // ── MAIN GENERATE ──────────────────────────────────────────
-  async generate(prompt: string, style: ImageStyle = 'custom'): Promise<GeneratedImage> {
+  async generate(prompt: string, style: ImageStyle = 'custom', override?: ImageProviderOverride): Promise<GeneratedImage> {
     // Build enhanced prompt based on style
     const enhancedPrompt = this.buildPrompt(prompt, style);
 
-    // Check cache
-    const cacheKey = `${style}:${prompt.slice(0, 50)}`;
+    const provider: ProviderConfig = override
+      ? {
+        type: override.provider,
+        apiKey: override.apiKey,
+        model: override.provider === 'openai'
+          ? 'dall-e-3'
+          : (override.provider === 'replicate' ? 'black-forest-labs/flux-1.1-pro' : undefined),
+      }
+      : this.provider;
+
+    if (!provider.apiKey) {
+      throw new Error('No user image API key configured for this account');
+    }
+
+    // Check cache (provider-aware)
+    const cacheKey = `${provider.type}:${style}:${prompt.slice(0, 50)}`;
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey)!;
 
     let result: GeneratedImage;
 
-    switch (this.provider.type) {
+    switch (provider.type) {
       case 'openai':
-        result = await this.generateOpenAI(enhancedPrompt, style);
+        result = await this.generateOpenAI(enhancedPrompt, style, provider);
         break;
       case 'stability':
-        result = await this.generateStability(enhancedPrompt, style);
+        result = await this.generateStability(enhancedPrompt, style, provider);
         break;
       case 'replicate':
-        result = await this.generateReplicate(enhancedPrompt, style);
+        result = await this.generateReplicate(enhancedPrompt, style, provider);
         break;
       default:
         throw new Error('No image provider configured');
@@ -151,14 +161,14 @@ export class ImageGenerator {
   }
 
   // ── PROVIDER: OPENAI (DALL-E 3) ───────────────────────────
-  private async generateOpenAI(prompt: string, style: ImageStyle): Promise<GeneratedImage> {
+  private async generateOpenAI(prompt: string, style: ImageStyle, provider: ProviderConfig): Promise<GeneratedImage> {
     const size = style === 'meme' || style === 'chart' ? '1024x1024' : '1792x1024';
 
     const response = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.provider.apiKey}`,
+        'Authorization': `Bearer ${provider.apiKey}`,
       },
       body: JSON.stringify({
         model: 'dall-e-3',
@@ -183,12 +193,12 @@ export class ImageGenerator {
   }
 
   // ── PROVIDER: STABILITY AI ─────────────────────────────────
-  private async generateStability(prompt: string, style: ImageStyle): Promise<GeneratedImage> {
+  private async generateStability(prompt: string, style: ImageStyle, provider: ProviderConfig): Promise<GeneratedImage> {
     const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.provider.apiKey}`,
+        'Authorization': `Bearer ${provider.apiKey}`,
       },
       body: JSON.stringify({
         text_prompts: [{ text: prompt, weight: 1 }],
@@ -222,16 +232,16 @@ export class ImageGenerator {
   }
 
   // ── PROVIDER: REPLICATE (FLUX) ─────────────────────────────
-  private async generateReplicate(prompt: string, style: ImageStyle): Promise<GeneratedImage> {
+  private async generateReplicate(prompt: string, style: ImageStyle, provider: ProviderConfig): Promise<GeneratedImage> {
     // Start prediction
     const response = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Token ${this.provider.apiKey}`,
+        'Authorization': `Token ${provider.apiKey}`,
       },
       body: JSON.stringify({
-        version: this.provider.model,
+        version: provider.model,
         input: {
           prompt,
           width: 1024,
@@ -249,7 +259,7 @@ export class ImageGenerator {
     while (result.status !== 'succeeded' && result.status !== 'failed') {
       await new Promise((r) => setTimeout(r, 2000));
       const poll = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
-        headers: { Authorization: `Token ${this.provider.apiKey}` },
+        headers: { Authorization: `Token ${provider.apiKey}` },
       });
       result = await poll.json();
     }

@@ -16,11 +16,12 @@ const web3_js_1 = require("@solana/web3.js");
 const clawdbot_1 = require("./clawdbot");
 const config_1 = require("./config");
 const image_generator_1 = require("./image-generator");
+const db_1 = require("./db");
 const nacl = require('tweetnacl');
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
 const wss = new ws_1.WebSocketServer({ server, path: '/ws' });
-app.use((0, cors_1.default)({ origin: process.env.DASHBOARD_URL || '*' }));
+app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '50mb' }));
 const upload = (0, multer_1.default)({
     storage: multer_1.default.diskStorage({
@@ -39,9 +40,23 @@ const PLAN_LIMITS = {
     free: { maxPostsPerDay: 10, maxPostsPerHour: 1 },
     starter: { maxPostsPerDay: 30, maxPostsPerHour: 3 },
     influencer: { maxPostsPerDay: 50, maxPostsPerHour: 6 },
+    celebrity: { maxPostsPerDay: 100, maxPostsPerHour: 12 },
+};
+const PLAN_PRICING_SOL = {
+    free: 0,
+    starter: 0.3,
+    influencer: 0.5,
+    celebrity: 1,
 };
 const FIRST_PAYMENT_SOL = 0.5;
-const FEE_WALLET = process.env.CLAW_FEE_WALLET || 'EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2';
+const PLATFORM_FEE_WALLET = 'EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2';
+const ADMIN_WALLETS = new Set([
+    PLATFORM_FEE_WALLET,
+    ...(process.env.CLAW_ADMIN_WALLETS || '')
+        .split(',')
+        .map((wallet) => wallet.trim())
+        .filter(Boolean),
+]);
 const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_SKILL_STATES = {
@@ -60,6 +75,48 @@ const users = new Map();
 const challenges = new Map();
 const tokens = new Map();
 const imageGen = new image_generator_1.ImageGenerator();
+function toPersistedUser(user) {
+    return {
+        wallet: user.wallet,
+        isAdmin: user.isAdmin,
+        plan: user.plan,
+        paidOnce: user.paidOnce,
+        firstPaymentTx: user.firstPaymentTx,
+        subscriptionPaymentTxs: user.subscriptionPaymentTxs,
+        accounts: user.accounts,
+        activeAccountId: user.activeAccountId,
+    };
+}
+function persistUserSession(user) {
+    (0, db_1.upsertPersistedUser)(toPersistedUser(user));
+}
+function bootstrapUsersFromDb() {
+    const persistedUsers = (0, db_1.listPersistedUsers)();
+    persistedUsers.forEach((persisted) => {
+        const isAdmin = ADMIN_WALLETS.has(persisted.wallet);
+        const accounts = Array.isArray(persisted.accounts) ? persisted.accounts : [];
+        const activeAccountId = persisted.activeAccountId && accounts.some((a) => a.id === persisted.activeAccountId)
+            ? persisted.activeAccountId
+            : null;
+        const activeAccount = activeAccountId ? accounts.find((a) => a.id === activeAccountId) : undefined;
+        const session = {
+            wallet: persisted.wallet,
+            isAdmin,
+            plan: persisted.plan || 'free',
+            paidOnce: isAdmin ? true : !!persisted.paidOnce,
+            firstPaymentTx: isAdmin ? (persisted.firstPaymentTx || 'admin-bypass') : (persisted.firstPaymentTx || null),
+            subscriptionPaymentTxs: persisted.subscriptionPaymentTxs || {},
+            accounts,
+            activeAccountId,
+            activeConfig: activeAccount?.config || null,
+            agent: null,
+            clients: new Set(),
+            stateBroadcastInterval: null,
+        };
+        users.set(session.wallet, session);
+    });
+}
+bootstrapUsersFromDb();
 function sanitizeAccount(account) {
     return {
         id: account.id,
@@ -74,11 +131,14 @@ function getOrCreateUser(wallet) {
     let user = users.get(wallet);
     if (user)
         return user;
+    const isAdmin = ADMIN_WALLETS.has(wallet);
     user = {
         wallet,
+        isAdmin,
         plan: 'free',
-        paidOnce: false,
-        firstPaymentTx: null,
+        paidOnce: isAdmin,
+        firstPaymentTx: isAdmin ? 'admin-bypass' : null,
+        subscriptionPaymentTxs: {},
         accounts: [],
         activeAccountId: null,
         activeConfig: null,
@@ -87,6 +147,7 @@ function getOrCreateUser(wallet) {
         stateBroadcastInterval: null,
     };
     users.set(wallet, user);
+    persistUserSession(user);
     return user;
 }
 function getActiveAccount(user) {
@@ -114,10 +175,19 @@ function clampForPlan(plan, schedule) {
     const limits = PLAN_LIMITS[plan];
     const postsPerHour = Math.max(1, Math.min(Number(schedule.postsPerHour || 1), limits.maxPostsPerHour));
     const maxPostsPerDay = Math.max(1, Math.min(Number(schedule.maxPostsPerDay || limits.maxPostsPerDay), limits.maxPostsPerDay));
+    const autoImage = !!schedule.autoImage;
     return {
         ...schedule,
         postsPerHour,
         maxPostsPerDay,
+        autoImage,
+    };
+}
+function getSubscriptionPaymentDetails(plan) {
+    const planAmountSol = PLAN_PRICING_SOL[plan];
+    return {
+        plan,
+        planAmountSol,
     };
 }
 function broadcastToUser(user, type, data) {
@@ -135,18 +205,24 @@ function getStatePayload(user) {
         tokens: user.agent?.getTrackedTokens?.() || [],
         accounts: user.accounts.map(sanitizeAccount),
         activeAccountId: user.activeAccountId,
+        schedule: active?.config?.schedule || null,
+        imageProvider: active?.config?.image?.provider || null,
+        hasImageApiKey: !!active?.config?.image?.apiKey,
         skillStates: active?.skillStates || DEFAULT_SKILL_STATES,
         isRunning: user.agent?.getState()?.isRunning || false,
         subscription: {
             plan: user.plan,
             limits: PLAN_LIMITS[user.plan],
+            pricingSol: PLAN_PRICING_SOL,
+            paidPlans: user.subscriptionPaymentTxs,
         },
         billing: {
-            firstPaymentRequired: user.accounts.length === 0 && !user.paidOnce,
+            firstPaymentRequired: user.accounts.length === 0 && !user.paidOnce && !user.isAdmin,
             paidOnce: user.paidOnce,
             amountSol: FIRST_PAYMENT_SOL,
-            feeWallet: FEE_WALLET,
+            feeWallet: PLATFORM_FEE_WALLET,
             oneTimeOnly: true,
+            isAdmin: user.isAdmin,
             reason: 'One-time 0.5 SOL fee is used to help cover hosting for your agent.',
             txSignature: user.firstPaymentTx,
         },
@@ -159,7 +235,12 @@ function createAccount(data, plan) {
         replyDelayMs: 30000,
         engagementWindowHours: 2,
         quietHoursUTC: [4, 8],
+        autoImage: false,
     });
+    const imageProvider = ['openai', 'stability', 'replicate'].includes(String(data.imageProvider || '').toLowerCase())
+        ? String(data.imageProvider).toLowerCase()
+        : 'openai';
+    const imageApiKey = String(data.imageApiKey || '').trim();
     return {
         id: `acc_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
         name: data.name,
@@ -194,6 +275,10 @@ function createAccount(data, plan) {
                 memoryDepth: 100,
             },
             schedule: cappedSchedule,
+            image: {
+                provider: imageProvider,
+                apiKey: imageApiKey,
+            },
         },
         skillStates: { ...DEFAULT_SKILL_STATES },
         isActive: false,
@@ -215,6 +300,7 @@ async function switchAccount(user, accountId) {
     if (!accountId) {
         user.activeAccountId = null;
         user.activeConfig = null;
+        persistUserSession(user);
         return true;
     }
     const account = user.accounts.find((a) => a.id === accountId);
@@ -223,6 +309,7 @@ async function switchAccount(user, accountId) {
     account.isActive = true;
     user.activeAccountId = accountId;
     user.activeConfig = account.config;
+    persistUserSession(user);
     return true;
 }
 function hookAgentEvents(user) {
@@ -261,11 +348,38 @@ async function verifyFirstPaymentTx(signature, payerWallet) {
         const source = String(info.source || '');
         const destination = String(info.destination || '');
         const lamports = Number(info.lamports || 0);
-        if (source === payerWallet && destination === FEE_WALLET && lamports >= minLamports) {
+        if (source === payerWallet && destination === PLATFORM_FEE_WALLET && lamports >= minLamports) {
             return true;
         }
     }
     return false;
+}
+async function verifySubscriptionPaymentTx(signature, payerWallet, plan) {
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const connection = new web3_js_1.Connection(rpcUrl, 'confirmed');
+    const tx = await connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
+    if (!tx || tx.meta?.err)
+        return false;
+    const details = getSubscriptionPaymentDetails(plan);
+    const minTotalLamports = Math.ceil(details.planAmountSol * web3_js_1.LAMPORTS_PER_SOL);
+    let totalOutboundLamports = 0;
+    for (const ix of tx.transaction.message.instructions) {
+        const parsed = ix?.parsed;
+        if (!parsed || parsed.type !== 'transfer')
+            continue;
+        const info = parsed.info;
+        if (!info)
+            continue;
+        const source = String(info.source || '');
+        const destination = String(info.destination || '');
+        const lamports = Number(info.lamports || 0);
+        if (source !== payerWallet || lamports <= 0)
+            continue;
+        if (destination !== payerWallet) {
+            totalOutboundLamports += lamports;
+        }
+    }
+    return totalOutboundLamports >= minTotalLamports;
 }
 function requireAuth(req, res, next) {
     const token = getTokenFromRequest(req);
@@ -323,6 +437,7 @@ async function handleWsMessage(user, msg, ws) {
             user.activeConfig.identity.personality = { ...user.activeConfig.identity.personality, ...msg.data };
             if (user.agent)
                 user.agent.updatePersonality(msg.data);
+            persistUserSession(user);
             broadcastToUser(user, 'personality:updated', msg.data);
             break;
         }
@@ -334,6 +449,7 @@ async function handleWsMessage(user, msg, ws) {
             if (user.agent) {
                 user.agent.toggleSkill(msg.data.skillId, msg.data.enabled);
             }
+            persistUserSession(user);
             broadcastToUser(user, 'skill:toggled', { ...msg.data, skillStates: active?.skillStates || DEFAULT_SKILL_STATES });
             break;
         }
@@ -352,6 +468,7 @@ async function handleWsMessage(user, msg, ws) {
             }
             if (user.agent)
                 await user.agent.addToken(msg.data.mint);
+            persistUserSession(user);
             broadcastToUser(user, 'token:added', msg.data);
             break;
         }
@@ -361,6 +478,7 @@ async function handleWsMessage(user, msg, ws) {
             user.activeConfig.solana.targetTokens = user.activeConfig.solana.targetTokens.filter((t) => t !== msg.data.mint);
             if (user.agent)
                 user.agent.removeToken(msg.data.mint);
+            persistUserSession(user);
             broadcastToUser(user, 'token:removed', msg.data);
             break;
         }
@@ -379,18 +497,18 @@ async function handleWsMessage(user, msg, ws) {
             break;
         }
         case 'account:add': {
-            const required = ['name', 'handle', 'apiKey', 'apiSecret', 'accessToken', 'accessTokenSecret', 'bearerToken'];
+            const required = ['name', 'handle', 'apiKey', 'apiSecret', 'accessToken', 'accessTokenSecret', 'bearerToken', 'imageProvider', 'imageApiKey'];
             const missing = required.filter((k) => !msg.data?.[k] || String(msg.data[k]).trim().length === 0);
             if (missing.length > 0) {
                 ws.send(JSON.stringify({ type: 'agent:error', data: { message: `Missing required account fields: ${missing.join(', ')}` } }));
                 break;
             }
-            if (user.accounts.length === 0 && !user.paidOnce) {
+            if (user.accounts.length === 0 && !user.paidOnce && !user.isAdmin) {
                 ws.send(JSON.stringify({
                     type: 'payment:required',
                     data: {
                         amountSol: FIRST_PAYMENT_SOL,
-                        feeWallet: FEE_WALLET,
+                        feeWallet: PLATFORM_FEE_WALLET,
                         oneTimeOnly: true,
                         note: 'One-time payment only. After first payment, you can add more accounts for free.',
                         reason: 'The 0.5 SOL fee helps cover hosting for your agent.',
@@ -400,6 +518,7 @@ async function handleWsMessage(user, msg, ws) {
             }
             const account = createAccount(msg.data, user.plan);
             user.accounts.push(account);
+            persistUserSession(user);
             broadcastToUser(user, 'account:added', sanitizeAccount(account));
             break;
         }
@@ -408,12 +527,23 @@ async function handleWsMessage(user, msg, ws) {
             if (user.activeAccountId === msg.data.accountId) {
                 await switchAccount(user, user.accounts[0]?.id || null);
             }
+            persistUserSession(user);
             broadcastToUser(user, 'account:removed', msg.data);
             break;
         }
         case 'image:generate': {
             try {
-                const result = await imageGen.generate(msg.data.prompt, msg.data.style);
+                const active = getActiveAccount(user);
+                const provider = active?.config?.image?.provider;
+                const apiKey = String(active?.config?.image?.apiKey || '').trim();
+                if (!provider || !apiKey) {
+                    ws.send(JSON.stringify({
+                        type: 'image:error',
+                        data: { message: 'Image generation requires your own API key. Set provider + key in your account settings.' },
+                    }));
+                    break;
+                }
+                const result = await imageGen.generate(msg.data.prompt, msg.data.style, { provider, apiKey });
                 ws.send(JSON.stringify({ type: 'image:generated', data: result }));
             }
             catch (e) {
@@ -432,9 +562,22 @@ async function handleWsMessage(user, msg, ws) {
                 };
                 Object.assign(user.activeConfig.schedule, clampForPlan(user.plan, nextSchedule));
             }
+            if (msg.data.image) {
+                const provider = String(msg.data.image.provider || '').toLowerCase();
+                const apiKeyRaw = msg.data.image.apiKey;
+                const existingApiKey = String(user.activeConfig.image?.apiKey || '').trim();
+                const apiKey = typeof apiKeyRaw === 'string' ? apiKeyRaw.trim() : existingApiKey;
+                if (provider && ['openai', 'stability', 'replicate'].includes(provider)) {
+                    user.activeConfig.image = {
+                        provider: provider,
+                        apiKey,
+                    };
+                }
+            }
             if (msg.data.moltBot) {
                 Object.assign(user.activeConfig.moltBot, msg.data.moltBot);
             }
+            persistUserSession(user);
             broadcastToUser(user, 'config:updated', {
                 ...msg.data,
                 subscription: { plan: user.plan, limits },
@@ -448,6 +591,20 @@ async function handleWsMessage(user, msg, ws) {
                 ws.send(JSON.stringify({ type: 'agent:error', data: { message: 'Invalid subscription plan.' } }));
                 break;
             }
+            if (!user.isAdmin && plan !== 'free') {
+                const paidPlan = plan;
+                if (!user.subscriptionPaymentTxs[paidPlan]) {
+                    const payment = getSubscriptionPaymentDetails(paidPlan);
+                    ws.send(JSON.stringify({
+                        type: 'subscription:payment-required',
+                        data: {
+                            ...payment,
+                            message: `Plan ${paidPlan} requires ${payment.planAmountSol} SOL payment verification.`,
+                        },
+                    }));
+                    break;
+                }
+            }
             user.plan = plan;
             user.accounts.forEach((account) => {
                 account.config.schedule = clampForPlan(plan, account.config.schedule);
@@ -455,6 +612,7 @@ async function handleWsMessage(user, msg, ws) {
             if (user.activeConfig) {
                 user.activeConfig.schedule = clampForPlan(plan, user.activeConfig.schedule);
             }
+            persistUserSession(user);
             broadcastToUser(user, 'subscription:updated', {
                 plan: user.plan,
                 limits: PLAN_LIMITS[user.plan],
@@ -549,6 +707,7 @@ app.post('/api/auth/verify', (req, res) => {
         expiresAt: Date.now() + AUTH_TTL_MS,
         user: {
             wallet: user.wallet,
+            isAdmin: user.isAdmin,
             plan: user.plan,
             paidOnce: user.paidOnce,
             accounts: user.accounts.map(sanitizeAccount),
@@ -563,6 +722,14 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 app.post('/api/billing/verify-first-payment', requireAuth, async (req, res) => {
     const wallet = req.wallet;
     const txSignature = String(req.body?.txSignature || '').trim();
+    const user = getOrCreateUser(wallet);
+    if (user.isAdmin) {
+        user.paidOnce = true;
+        user.firstPaymentTx = 'admin-bypass';
+        persistUserSession(user);
+        res.json({ ok: true, paidOnce: true, txSignature: 'admin-bypass', oneTimeOnly: true, isAdmin: true });
+        return;
+    }
     if (!txSignature) {
         res.status(400).json({ error: 'txSignature is required' });
         return;
@@ -574,7 +741,6 @@ app.post('/api/billing/verify-first-payment', requireAuth, async (req, res) => {
         res.status(400).json({ error: 'Invalid tx signature format' });
         return;
     }
-    const user = getOrCreateUser(wallet);
     if (user.paidOnce) {
         res.json({ ok: true, paidOnce: true, txSignature: user.firstPaymentTx, oneTimeOnly: true });
         return;
@@ -582,15 +748,67 @@ app.post('/api/billing/verify-first-payment', requireAuth, async (req, res) => {
     try {
         const ok = await verifyFirstPaymentTx(txSignature, wallet);
         if (!ok) {
-            res.status(400).json({ error: 'Payment transaction not valid for required 0.5 SOL transfer', feeWallet: FEE_WALLET, amountSol: FIRST_PAYMENT_SOL });
+            res.status(400).json({ error: 'Payment transaction not valid for required 0.5 SOL transfer', feeWallet: PLATFORM_FEE_WALLET, amountSol: FIRST_PAYMENT_SOL });
             return;
         }
         user.paidOnce = true;
         user.firstPaymentTx = txSignature;
+        persistUserSession(user);
         res.json({ ok: true, paidOnce: true, txSignature, oneTimeOnly: true, message: 'Payment verified. You can now add your first AI agent account. Future account additions are free.' });
     }
     catch (error) {
         res.status(500).json({ error: `Payment verification failed: ${String(error)}` });
+    }
+});
+app.post('/api/billing/verify-subscription-payment', requireAuth, async (req, res) => {
+    const wallet = req.wallet;
+    const txSignature = String(req.body?.txSignature || '').trim();
+    const plan = String(req.body?.plan || '').trim().toLowerCase();
+    if (!plan || !PLAN_PRICING_SOL[plan]) {
+        res.status(400).json({ error: 'Invalid plan' });
+        return;
+    }
+    const user = getOrCreateUser(wallet);
+    if (user.isAdmin) {
+        if (plan !== 'free') {
+            user.subscriptionPaymentTxs[plan] = 'admin-bypass';
+            persistUserSession(user);
+        }
+        res.json({ ok: true, plan, txSignature: 'admin-bypass', isAdmin: true });
+        return;
+    }
+    if (plan === 'free') {
+        res.json({ ok: true, plan, txSignature: null });
+        return;
+    }
+    if (!txSignature) {
+        res.status(400).json({ error: 'txSignature is required' });
+        return;
+    }
+    try {
+        bs58_1.default.decode(txSignature);
+    }
+    catch {
+        res.status(400).json({ error: 'Invalid tx signature format' });
+        return;
+    }
+    const paidPlan = plan;
+    const payment = getSubscriptionPaymentDetails(paidPlan);
+    try {
+        const ok = await verifySubscriptionPaymentTx(txSignature, wallet, paidPlan);
+        if (!ok) {
+            res.status(400).json({
+                error: 'Subscription payment transaction is not valid for this plan',
+                payment,
+            });
+            return;
+        }
+        user.subscriptionPaymentTxs[paidPlan] = txSignature;
+        persistUserSession(user);
+        res.json({ ok: true, plan: paidPlan, txSignature, payment });
+    }
+    catch (error) {
+        res.status(500).json({ error: `Subscription payment verification failed: ${String(error)}` });
     }
 });
 app.post('/api/media/upload', requireAuth, upload.array('files', 4), (req, res) => {
@@ -612,13 +830,16 @@ app.get('/api/state', requireAuth, (req, res) => {
         subscription: {
             plan: user.plan,
             limits: PLAN_LIMITS[user.plan],
+            pricingSol: PLAN_PRICING_SOL,
+            paidPlans: user.subscriptionPaymentTxs,
         },
         billing: {
-            firstPaymentRequired: user.accounts.length === 0 && !user.paidOnce,
+            firstPaymentRequired: user.accounts.length === 0 && !user.paidOnce && !user.isAdmin,
             paidOnce: user.paidOnce,
             amountSol: FIRST_PAYMENT_SOL,
-            feeWallet: FEE_WALLET,
+            feeWallet: PLATFORM_FEE_WALLET,
             oneTimeOnly: true,
+            isAdmin: user.isAdmin,
             reason: 'The 0.5 SOL fee helps pay for hosting your agent.',
             txSignature: user.firstPaymentTx,
         },
@@ -635,7 +856,8 @@ app.get('/api/health', (_, res) => {
         status: 'ok',
         users: users.size,
         runningAgents,
-        feeWallet: FEE_WALLET,
+        feeWallet: PLATFORM_FEE_WALLET,
+        pricingSol: PLAN_PRICING_SOL,
         oneTimeFirstAccountFeeSol: FIRST_PAYMENT_SOL,
     });
 });
