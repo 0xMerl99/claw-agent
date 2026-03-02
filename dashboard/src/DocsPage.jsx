@@ -5,7 +5,7 @@ export default function DocsPage() {
     <div style={{ minHeight: '100vh', background: '#07080c', color: '#e4e4ec', fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '42px 20px 90px' }}>
         <a href="/" style={{ color: '#9aa0bb', textDecoration: 'none', fontSize: 13 }}>← Back</a>
-        <h1 style={{ fontSize: 38, marginTop: 14, marginBottom: 10, color: '#ff3d00' }}>CLAW Documentation</h1>
+        <h1 style={{ fontSize: 38, marginTop: 14, marginBottom: 10, color: '#ff3d00' }}>ClawChi Documentation</h1>
         <p style={{ color: '#a9acc5', marginTop: 0, marginBottom: 26, lineHeight: 1.7 }}>
           Operational guide for dashboard access, wallet onboarding, plans, admin security, and production troubleshooting.
         </p>

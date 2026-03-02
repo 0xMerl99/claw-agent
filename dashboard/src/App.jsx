@@ -593,7 +593,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
       <header style={{position:"sticky",top:0,zIndex:50,background:`${X.b}f0`,borderBottom:`1px solid ${X.bd}`,backdropFilter:"blur(20px)"}}>
         <div style={{maxWidth:1840,margin:"0 auto",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:24,fontWeight:900,background:`linear-gradient(135deg,${X.a},${X.as})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🦀 CLAW</span>
+            <span style={{fontSize:24,fontWeight:900,background:`linear-gradient(135deg,${X.a},${X.as})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🦀 ClawChi</span>
             <span style={{fontSize:8,color:X.d,letterSpacing:4}}>COMMAND CENTER</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
