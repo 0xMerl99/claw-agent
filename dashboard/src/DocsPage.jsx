@@ -11,7 +11,19 @@ export default function DocsPage() {
         </p>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>1) Dashboard Access</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>1) How to Use (Quick Start)</h2>
+          <ol style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.9, paddingLeft: 20 }}>
+            <li>Open the dashboard and connect your wallet from the top-right button.</li>
+            <li>Go to <b>Accounts</b>, add your X API credentials, and switch to the account you want active.</li>
+            <li>Open <b>Settings</b>, choose your plan limits, and configure image provider keys if you want auto-image.</li>
+            <li>Use <b>Compose</b> to write a post/reply/quote and send manually (works even when agent loop is OFF).</li>
+            <li>Start the agent with the top-right ▶ button when you want autonomous posting cycles.</li>
+            <li>Watch activity in <b>Feed</b> and <b>Overview</b> for live events, status, and performance.</li>
+          </ol>
+        </section>
+
+        <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>2) Dashboard Access</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.85, paddingLeft: 18 }}>
             <li>Users can open the dashboard before connecting a wallet (preview mode).</li>
             <li>Tabs are viewable while disconnected, but actions/content are locked.</li>
@@ -22,7 +34,7 @@ export default function DocsPage() {
         </section>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>2) Wallet Authentication</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>3) Wallet Authentication</h2>
           <p style={{ color: '#9aa0bb', marginBottom: 0 }}>
             Authentication uses Phantom signature verification (`/api/auth/challenge` and `/api/auth/verify`).
             Successful verification creates a tokenized session used for REST and WebSocket auth.
@@ -30,7 +42,7 @@ export default function DocsPage() {
         </section>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>3) Onboarding & Payments</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>4) Onboarding & Payments</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.9, paddingLeft: 18 }}>
             <li>First account requires one-time 0.5 SOL setup payment verification.</li>
             <li>After first payment, additional accounts under the same wallet are unlocked.</li>
@@ -39,7 +51,7 @@ export default function DocsPage() {
         </section>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>4) Subscription Plans</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>5) Subscription Plans</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.9 }}>
             <li>Free: up to 10 posts/day</li>
             <li>Starter: 0.3 SOL, up to 30 posts/day</li>
@@ -49,7 +61,7 @@ export default function DocsPage() {
         </section>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>5) Admin Access (Private)</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>6) Admin Access (Private)</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.85, paddingLeft: 18 }}>
             <li>Admin privileges are backend-enforced by wallet allowlist, not by frontend route flags.</li>
             <li>Do not publicly link admin navigation in marketing/landing pages.</li>
@@ -59,7 +71,7 @@ export default function DocsPage() {
         </section>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>6) Image Generation Policy</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>7) Image Generation Policy</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.85, paddingLeft: 18 }}>
             <li>Image generation uses each user's own API keys (OpenAI/Stability/Replicate), never shared platform keys.</li>
             <li>Auto Image is OFF by default and can be enabled in Settings.</li>
@@ -69,7 +81,7 @@ export default function DocsPage() {
         </section>
 
         <section style={{ padding: 16, borderRadius: 10, background: '#101118', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>7) Deployment & Troubleshooting</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>8) Deployment & Troubleshooting</h2>
           <ul style={{ color: '#9aa0bb', margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
             <li><b>Frontend URL</b>: use dashboard service URL (example: claw-dashboard.onrender.com).</li>
             <li><b>Backend URL</b>: API-only service URL may show 404/"Cannot GET /" at root; verify <b>/api/health</b> instead.</li>
