@@ -27,7 +27,10 @@ export default function LandingPage() {
           <div style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 999, border: '1px solid #1c1e30', color: '#9aa0bb', fontSize: 11, marginBottom: 14 }}>
             Solana-auth AI Agent Platform
           </div>
-          <h1 style={{ fontSize: 52, margin: 0, marginBottom: 10, color: '#ff3d00', lineHeight: 1.08 }}>ClawChi</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <img src="/images/claw-agent.png" alt="ClawChi" style={{ width: 52, height: 52, objectFit: 'contain' }} />
+            <h1 style={{ fontSize: 52, margin: 0, color: '#ff3d00', lineHeight: 1.08 }}>ClawChi</h1>
+          </div>
           <p style={{ color: '#a9acc5', margin: 0, fontSize: 16, maxWidth: 760, lineHeight: 1.7 }}>
             Production-ready multi-tenant X agent system with wallet authentication, account management,
             real-time controls, and plan-based limits.
