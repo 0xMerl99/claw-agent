@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const CONTRACT_ADDRESS = 'So11111111111111111111111111111111111111112';
+const CONTRACT_ADDRESS = '7ix9F194jignZcJMDvjXGJwMjDV5cPeF7GYDbRL8pump';
 
 export default function LandingPage() {
   const [copied, setCopied] = useState(false);

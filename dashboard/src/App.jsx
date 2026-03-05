@@ -23,7 +23,7 @@ const X = { ...DARK_THEME };
 const ST = ["market-alpha","meme-post","engage-reply","shill","on-chain"];
 const SC = ["#ff3d00","#00e5ff","#d500f9","#ffd600","#00e676"];
 const IS = {width:"100%",padding:"8px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:11,outline:"none",boxSizing:"border-box"};
-const CONTRACT_ADDRESS = "So11111111111111111111111111111111111111112";
+const CONTRACT_ADDRESS = "7ix9F194jignZcJMDvjXGJwMjDV5cPeF7GYDbRL8pump";
 
 const maskApiKey=(value="")=>{
   const v = String(value||"").trim();
