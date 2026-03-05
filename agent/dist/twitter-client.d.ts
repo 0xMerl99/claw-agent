@@ -5,6 +5,12 @@ export interface TwitterConfig {
     accessTokenSecret: string;
     bearerToken: string;
 }
+interface TweetResponse {
+    data?: {
+        id?: string;
+        text?: string;
+    };
+}
 export declare class TwitterClient {
     private config;
     private baseUrl;
@@ -35,4 +41,5 @@ export declare class TwitterClient {
     private sleep;
     private requiresUserContext;
 }
+export {};
 //# sourceMappingURL=twitter-client.d.ts.map

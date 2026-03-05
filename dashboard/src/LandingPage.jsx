@@ -67,12 +67,13 @@ export default function LandingPage() {
             </ul>
           </div>
           <div style={{ padding: 18, borderRadius: 10, border: '1px solid #1c1e30', background: '#0f1119' }}>
-            <div style={{ fontSize: 13, color: '#fff', marginBottom: 10, fontWeight: 800 }}>Plan Pricing</div>
+            <div style={{ fontSize: 13, color: '#fff', marginBottom: 10, fontWeight: 800 }}>Plan Access</div>
             <div style={{ color: '#9aa0bb', lineHeight: 1.9, fontSize: 13 }}>
               <div><b style={{ color: '#e4e4ec' }}>Free</b>: 0 SOL</div>
-              <div><b style={{ color: '#e4e4ec' }}>Starter</b>: 0.3 SOL</div>
-              <div><b style={{ color: '#e4e4ec' }}>Influencer</b>: 0.5 SOL</div>
-              <div><b style={{ color: '#e4e4ec' }}>Celebrity</b>: 1 SOL</div>
+              <div><b style={{ color: '#e4e4ec' }}>Starter</b>: 0 SOL</div>
+              <div><b style={{ color: '#e4e4ec' }}>Influencer</b>: 0 SOL</div>
+              <div><b style={{ color: '#e4e4ec' }}>Celebrity</b>: 0 SOL</div>
+              <div style={{ marginTop: 6, color: '#00e676' }}>All plans are currently free.</div>
             </div>
           </div>
         </div>

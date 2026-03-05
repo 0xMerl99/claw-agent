@@ -24,10 +24,6 @@ class ImageGenerator {
     async generate(prompt, style = 'custom', override) {
         // Build enhanced prompt based on style
         const enhancedPrompt = this.buildPrompt(prompt, style);
-        // Check cache
-        const cacheKey = `${style}:${prompt.slice(0, 50)}`;
-        if (this.cache.has(cacheKey))
-            return this.cache.get(cacheKey);
         const provider = override
             ? {
                 type: override.provider,
@@ -40,6 +36,10 @@ class ImageGenerator {
         if (!provider.apiKey) {
             throw new Error('No user image API key configured for this account');
         }
+        // Check cache (provider-aware)
+        const cacheKey = `${provider.type}:${style}:${prompt.slice(0, 50)}`;
+        if (this.cache.has(cacheKey))
+            return this.cache.get(cacheKey);
         let result;
         switch (provider.type) {
             case 'openai':

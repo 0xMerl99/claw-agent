@@ -19,6 +19,20 @@ interface RateLimitState {
   limit: number;
 }
 
+interface QueuedRequest {
+  method: string;
+  endpoint: string;
+  body?: any;
+  params?: Record<string, any>;
+}
+
+interface TweetResponse {
+  data?: {
+    id?: string;
+    text?: string;
+  };
+}
+
 export class TwitterClient {
   private config: TwitterConfig;
   private baseUrl = 'https://api.twitter.com/2';
@@ -336,7 +350,7 @@ export class TwitterClient {
     );
 
     return response.data.map((tweet: any) => {
-      const author = users.get(tweet.author_id) || {};
+      const author: any = users.get(tweet.author_id) || {};
       return {
         id: tweet.id,
         text: tweet.text,

@@ -33,7 +33,7 @@ Set these in the Render dashboard:
 - Backend `claw-agent`:
      - `DASHBOARD_URL` = dashboard URL (e.g. `https://claw-dashboard.onrender.com`)
      - `SOLANA_RPC_URL`
-     - `CLAW_ADMIN_WALLETS` (comma-separated wallet addresses allowed to use `/admin` with payment bypass)
+     - `CLAW_ADMIN_WALLETS` (comma-separated wallet addresses allowed to use `/admin`)
      - `CLAW_DB_FILE` (recommended: `/var/data/claw-db.json`)
      - `OPENAI_API_KEY` and/or `STABILITY_API_KEY` and/or `REPLICATE_API_TOKEN`
 
@@ -41,21 +41,18 @@ Set these in the Render dashboard:
      - `VITE_API_URL` = backend URL (e.g. `https://claw-agent.onrender.com`)
      - `VITE_WS_URL` = backend websocket URL (e.g. `wss://claw-agent.onrender.com/ws`)
 
-## 3. Billing + Admin Behavior
+## 3. Plans + Admin Behavior
 
-- First account setup fee: `0.5 SOL` (non-admin users).
-- Subscription pricing:
-     - Free: `0 SOL`
-     - Starter: `0.3 SOL`
-     - Influencer: `0.5 SOL`
-     - Celebrity: `1 SOL`
+- All plans are currently free (`0 SOL`).
+- No first-account setup fee.
+- No subscription payment verification required.
 - Admin dashboard route:
      - `/admin`
-     - works only for wallets in `CLAW_ADMIN_WALLETS` (plus platform wallet)
+     - works only for wallets in `CLAW_ADMIN_WALLETS`
 
 ## 4. Persistence (DB)
 
-- Backend now uses a lightweight file database (`lowdb`) for users, accounts, plan state, and payment verification records.
+- Backend now uses a lightweight file database (`lowdb`) for users, accounts, and plan state.
 - On Render, persist it on attached disk via:
      - `CLAW_DB_FILE=/var/data/claw-db.json`
 
@@ -96,3 +93,5 @@ Same approach — set env vars in Netlify dashboard.
 - Helius RPC: Free tier
 - X API: Free tier
 - Image gen: ~$0.04/image
+
+Note: App-level onboarding and plan pricing are free. External provider costs (hosting/API usage) may still apply.

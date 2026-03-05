@@ -42,11 +42,11 @@ export default function DocsPage() {
         </section>
 
         <section style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: '#0f1119', border: '1px solid #1c1e30' }}>
-          <h2 style={{ fontSize: 18, marginTop: 0 }}>4) Onboarding & Payments</h2>
+          <h2 style={{ fontSize: 18, marginTop: 0 }}>4) Onboarding (Free)</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.9, paddingLeft: 18 }}>
-            <li>First account requires one-time 0.5 SOL setup payment verification.</li>
-            <li>After first payment, additional accounts under the same wallet are unlocked.</li>
-            <li>Plan upgrades require plan-specific SOL payment verification.</li>
+            <li>No setup payment is required to add your first account.</li>
+            <li>No subscription payment verification is required for plan changes.</li>
+            <li>Wallet auth is still required for secure user sessions.</li>
           </ul>
         </section>
 
@@ -54,9 +54,10 @@ export default function DocsPage() {
           <h2 style={{ fontSize: 18, marginTop: 0 }}>5) Subscription Plans</h2>
           <ul style={{ color: '#9aa0bb', marginTop: 0, marginBottom: 0, lineHeight: 1.9 }}>
             <li>Free: up to 10 posts/day</li>
-            <li>Starter: 0.3 SOL, up to 30 posts/day</li>
-            <li>Influencer: 0.5 SOL, up to 50 posts/day</li>
-            <li>Celebrity: 1 SOL, up to 100 posts/day</li>
+            <li>Starter: 0 SOL, up to 30 posts/day</li>
+            <li>Influencer: 0 SOL, up to 50 posts/day</li>
+            <li>Celebrity: 0 SOL, up to 100 posts/day</li>
+            <li>All plans are currently free to use.</li>
           </ul>
         </section>
 

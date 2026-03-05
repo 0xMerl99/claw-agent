@@ -553,7 +553,7 @@ interface AgentContext {
 interface Strategy {
   name: string;
   weight: number;
-  lastUsed: number;
+  lastUsed?: number;
 }
 
 interface Tweet {

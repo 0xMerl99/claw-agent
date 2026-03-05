@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import bs58 from 'bs58';
-import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import { ClawdBot } from './clawdbot';
 import { AgentConfig, DEFAULT_CONFIG } from './config';
 import { ImageGenerator } from './image-generator';
@@ -48,16 +48,14 @@ const PLAN_LIMITS: Record<Plan, { maxPostsPerDay: number; maxPostsPerHour: numbe
 
 const PLAN_PRICING_SOL: Record<Plan, number> = {
   free: 0,
-  starter: 0.3,
-  influencer: 0.5,
-  celebrity: 1,
+  starter: 0,
+  influencer: 0,
+  celebrity: 0,
 };
 
-const FIRST_PAYMENT_SOL = 0.5;
-const PLATFORM_FEE_WALLET = 'So11111111111111111111111111111111111111112';
+const FIRST_PAYMENT_SOL = 0;
 const ADMIN_WALLETS = new Set(
   [
-    PLATFORM_FEE_WALLET,
     ...(process.env.CLAW_ADMIN_WALLETS || '')
       .split(',')
       .map((wallet) => wallet.trim())
@@ -180,8 +178,8 @@ function bootstrapUsersFromDb(): void {
       wallet: persisted.wallet,
       isAdmin,
       plan: persisted.plan || 'free',
-      paidOnce: isAdmin ? true : !!persisted.paidOnce,
-      firstPaymentTx: isAdmin ? (persisted.firstPaymentTx || 'admin-bypass') : (persisted.firstPaymentTx || null),
+      paidOnce: true,
+      firstPaymentTx: persisted.firstPaymentTx || 'free-tier',
       subscriptionPaymentTxs: persisted.subscriptionPaymentTxs || {},
       accounts,
       activeAccountId,
@@ -218,8 +216,8 @@ function getOrCreateUser(wallet: string): UserSession {
     wallet,
     isAdmin,
     plan: 'free',
-    paidOnce: isAdmin,
-    firstPaymentTx: isAdmin ? 'admin-bypass' : null,
+    paidOnce: true,
+    firstPaymentTx: 'free-tier',
     subscriptionPaymentTxs: {},
     accounts: [],
     activeAccountId: null,
@@ -269,15 +267,6 @@ function clampForPlan(plan: Plan, schedule: any) {
   };
 }
 
-function getSubscriptionPaymentDetails(plan: PaidPlan) {
-  const planAmountSol = PLAN_PRICING_SOL[plan];
-
-  return {
-    plan,
-    planAmountSol,
-  };
-}
-
 function broadcastToUser(user: UserSession, type: string, data: any) {
   const message = JSON.stringify({ type, data, timestamp: Date.now() });
   user.clients.forEach((ws) => {
@@ -312,14 +301,8 @@ function getStatePayload(user: UserSession) {
       paidPlans: user.subscriptionPaymentTxs,
     },
     billing: {
-      firstPaymentRequired: user.accounts.length === 0 && !user.paidOnce && !user.isAdmin,
-      paidOnce: user.paidOnce,
-      amountSol: FIRST_PAYMENT_SOL,
-      feeWallet: PLATFORM_FEE_WALLET,
-      oneTimeOnly: true,
       isAdmin: user.isAdmin,
-      reason: 'One-time 0.5 SOL fee is used to help cover hosting for your agent.',
-      txSignature: user.firstPaymentTx,
+      mode: 'free',
     },
   };
 }
@@ -434,63 +417,6 @@ function hookAgentEvents(user: UserSession) {
       });
     }
   }, 10_000);
-}
-
-async function verifyFirstPaymentTx(signature: string, payerWallet: string): Promise<boolean> {
-  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-  const connection = new Connection(rpcUrl, 'confirmed');
-  const tx = await connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
-
-  if (!tx || tx.meta?.err) return false;
-
-  const minLamports = FIRST_PAYMENT_SOL * LAMPORTS_PER_SOL;
-  for (const ix of tx.transaction.message.instructions as any[]) {
-    const parsed = ix?.parsed;
-    if (!parsed || parsed.type !== 'transfer') continue;
-    const info = parsed.info;
-    if (!info) continue;
-
-    const source = String(info.source || '');
-    const destination = String(info.destination || '');
-    const lamports = Number(info.lamports || 0);
-
-    if (source === payerWallet && destination === PLATFORM_FEE_WALLET && lamports >= minLamports) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-async function verifySubscriptionPaymentTx(signature: string, payerWallet: string, plan: PaidPlan): Promise<boolean> {
-  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-  const connection = new Connection(rpcUrl, 'confirmed');
-  const tx = await connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
-
-  if (!tx || tx.meta?.err) return false;
-
-  const details = getSubscriptionPaymentDetails(plan);
-  const minTotalLamports = Math.ceil(details.planAmountSol * LAMPORTS_PER_SOL);
-
-  let totalOutboundLamports = 0;
-
-  for (const ix of tx.transaction.message.instructions as any[]) {
-    const parsed = ix?.parsed;
-    if (!parsed || parsed.type !== 'transfer') continue;
-    const info = parsed.info;
-    if (!info) continue;
-
-    const source = String(info.source || '');
-    const destination = String(info.destination || '');
-    const lamports = Number(info.lamports || 0);
-
-    if (source !== payerWallet || lamports <= 0) continue;
-    if (destination !== payerWallet) {
-      totalOutboundLamports += lamports;
-    }
-  }
-
-  return totalOutboundLamports >= minTotalLamports;
 }
 
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -646,20 +572,6 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
         break;
       }
 
-      if (user.accounts.length === 0 && !user.paidOnce && !user.isAdmin) {
-        ws.send(JSON.stringify({
-          type: 'payment:required',
-          data: {
-            amountSol: FIRST_PAYMENT_SOL,
-            feeWallet: PLATFORM_FEE_WALLET,
-            oneTimeOnly: true,
-            note: 'One-time payment only. After first payment, you can add more accounts for free.',
-            reason: 'The 0.5 SOL fee helps cover hosting for your agent.',
-          },
-        }));
-        break;
-      }
-
       const account = createAccount(msg.data, user.plan);
       user.accounts.push(account);
       persistUserSession(user);
@@ -789,21 +701,6 @@ async function handleWsMessage(user: UserSession, msg: any, ws: WebSocket) {
       if (!plan || !PLAN_LIMITS[plan]) {
         ws.send(JSON.stringify({ type: 'agent:error', data: { message: 'Invalid subscription plan.' } }));
         break;
-      }
-
-      if (!user.isAdmin && plan !== 'free') {
-        const paidPlan = plan as PaidPlan;
-        if (!user.subscriptionPaymentTxs[paidPlan]) {
-          const payment = getSubscriptionPaymentDetails(paidPlan);
-          ws.send(JSON.stringify({
-            type: 'subscription:payment-required',
-            data: {
-              ...payment,
-              message: `Plan ${paidPlan} requires ${payment.planAmountSol} SOL payment verification.`,
-            },
-          }));
-          break;
-        }
       }
 
       user.plan = plan;
@@ -940,109 +837,27 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 
 app.post('/api/billing/verify-first-payment', requireAuth, async (req, res) => {
   const wallet = (req as any).wallet as string;
-  const txSignature = String(req.body?.txSignature || '').trim();
   const user = getOrCreateUser(wallet);
 
-  if (user.isAdmin) {
-    user.paidOnce = true;
-    user.firstPaymentTx = 'admin-bypass';
-    persistUserSession(user);
-    res.json({ ok: true, paidOnce: true, txSignature: 'admin-bypass', oneTimeOnly: true, isAdmin: true });
-    return;
-  }
-
-  if (!txSignature) {
-    res.status(400).json({ error: 'txSignature is required' });
-    return;
-  }
-
-  try {
-    bs58.decode(txSignature);
-  } catch {
-    res.status(400).json({ error: 'Invalid tx signature format' });
-    return;
-  }
-
-  if (user.paidOnce) {
-    res.json({ ok: true, paidOnce: true, txSignature: user.firstPaymentTx, oneTimeOnly: true });
-    return;
-  }
-
-  try {
-    const ok = await verifyFirstPaymentTx(txSignature, wallet);
-    if (!ok) {
-      res.status(400).json({ error: 'Payment transaction not valid for required 0.5 SOL transfer', feeWallet: PLATFORM_FEE_WALLET, amountSol: FIRST_PAYMENT_SOL });
-      return;
-    }
-
-    user.paidOnce = true;
-    user.firstPaymentTx = txSignature;
-    persistUserSession(user);
-
-    res.json({ ok: true, paidOnce: true, txSignature, oneTimeOnly: true, message: 'Payment verified. You can now add your first AI agent account. Future account additions are free.' });
-  } catch (error) {
-    res.status(500).json({ error: `Payment verification failed: ${String(error)}` });
-  }
+  user.paidOnce = true;
+  user.firstPaymentTx = user.firstPaymentTx || 'free-tier';
+  persistUserSession(user);
+  res.json({ ok: true, paidOnce: true, txSignature: user.firstPaymentTx, oneTimeOnly: true, message: 'No payment required. Onboarding is free.' });
 });
 
 app.post('/api/billing/verify-subscription-payment', requireAuth, async (req, res) => {
   const wallet = (req as any).wallet as string;
-  const txSignature = String(req.body?.txSignature || '').trim();
   const plan = String(req.body?.plan || '').trim().toLowerCase() as Plan;
 
-  if (!plan || !PLAN_PRICING_SOL[plan]) {
+  if (!plan || !PLAN_LIMITS[plan]) {
     res.status(400).json({ error: 'Invalid plan' });
     return;
   }
 
   const user = getOrCreateUser(wallet);
-
-  if (user.isAdmin) {
-    if (plan !== 'free') {
-      user.subscriptionPaymentTxs[plan as PaidPlan] = 'admin-bypass';
-      persistUserSession(user);
-    }
-    res.json({ ok: true, plan, txSignature: 'admin-bypass', isAdmin: true });
-    return;
-  }
-
-  if (plan === 'free') {
-    res.json({ ok: true, plan, txSignature: null });
-    return;
-  }
-
-  if (!txSignature) {
-    res.status(400).json({ error: 'txSignature is required' });
-    return;
-  }
-
-  try {
-    bs58.decode(txSignature);
-  } catch {
-    res.status(400).json({ error: 'Invalid tx signature format' });
-    return;
-  }
-
-  const paidPlan = plan as PaidPlan;
-  const payment = getSubscriptionPaymentDetails(paidPlan);
-
-  try {
-    const ok = await verifySubscriptionPaymentTx(txSignature, wallet, paidPlan);
-    if (!ok) {
-      res.status(400).json({
-        error: 'Subscription payment transaction is not valid for this plan',
-        payment,
-      });
-      return;
-    }
-
-    user.subscriptionPaymentTxs[paidPlan] = txSignature;
-    persistUserSession(user);
-
-    res.json({ ok: true, plan: paidPlan, txSignature, payment });
-  } catch (error) {
-    res.status(500).json({ error: `Subscription payment verification failed: ${String(error)}` });
-  }
+  if (plan !== 'free') user.subscriptionPaymentTxs[plan as PaidPlan] = 'free-tier';
+  persistUserSession(user);
+  res.json({ ok: true, plan, txSignature: user.subscriptionPaymentTxs[plan as PaidPlan] || null, message: 'No payment required. All plans are free.' });
 });
 
 app.post('/api/media/upload', requireAuth, upload.array('files', 4), (req, res) => {
@@ -1070,14 +885,8 @@ app.get('/api/state', requireAuth, (req, res) => {
       paidPlans: user.subscriptionPaymentTxs,
     },
     billing: {
-      firstPaymentRequired: user.accounts.length === 0 && !user.paidOnce && !user.isAdmin,
-      paidOnce: user.paidOnce,
-      amountSol: FIRST_PAYMENT_SOL,
-      feeWallet: PLATFORM_FEE_WALLET,
-      oneTimeOnly: true,
       isAdmin: user.isAdmin,
-      reason: 'The 0.5 SOL fee helps pay for hosting your agent.',
-      txSignature: user.firstPaymentTx,
+      mode: 'free',
     },
   });
 });
@@ -1093,7 +902,7 @@ app.get('/api/health', (_, res) => {
     status: 'ok',
     users: users.size,
     runningAgents,
-    feeWallet: PLATFORM_FEE_WALLET,
+    billingMode: 'free',
     pricingSol: PLAN_PRICING_SOL,
     oneTimeFirstAccountFeeSol: FIRST_PAYMENT_SOL,
   });

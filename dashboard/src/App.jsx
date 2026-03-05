@@ -100,11 +100,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
   const [cmdToastLeaving,setCmdToastLeaving]=useState(false);
   const [issueBanner,sIssueBanner]=useState(null);
   const [issueBannerLeaving,setIssueBannerLeaving]=useState(false);
-  const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0.3,influencer:0.5,celebrity:1},paidPlans:{}});
-  const [billing,setBilling]=useState({firstPaymentRequired:false,paidOnce:false,amountSol:0.5,feeWallet:"",oneTimeOnly:true,reason:"",txSignature:null,isAdmin:false});
-  const [txSig,setTxSig]=useState("");
-  const [subTxSig,setSubTxSig]=useState("");
-  const [pendingPlan,setPendingPlan]=useState("");
+  const [subscription,setSubscription]=useState({plan:"free",limits:{maxPostsPerDay:10,maxPostsPerHour:1},pricingSol:{free:0,starter:0,influencer:0,celebrity:0},paidPlans:{}});
+  const [billing,setBilling]=useState({isAdmin:false,mode:"free"});
   const [viewportWidth,setViewportWidth]=useState(typeof window !== "undefined" ? window.innerWidth : 1280);
   const [solPrice,setSolPrice]=useState(null);
   const toastLeaveTimerRef = useRef(null);
@@ -397,8 +394,8 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
       ws.on("account:switched",d=>{sAc(p=>p.map(a=>({...normAc(a),on:a.id===d.accountId})));applySkillStates(d.skillStates);cmd_("Ack account:switched");lg_("🔄 Account switched","o")}),
       ws.on("account:added",d=>{const na=normAc(d);sAc(p=>[...p,na]);lg_(`➕ ${na.nm||na.hd||"Account"}`,"o")}),
       ws.on("account:removed",d=>{sAc(p=>p.filter(a=>a.id!==d.accountId));lg_("🗑️ Account removed","w")}),
-      ws.on("payment:required",d=>{setBilling((prev)=>({...prev,...d,firstPaymentRequired:true}));issue_("One-time 0.5 SOL payment required before adding your first account.","warn");}),
-      ws.on("subscription:payment-required",d=>{setPendingPlan(d.plan||"");issue_(d.message||"Plan payment required before upgrade.","warn")}),
+      ws.on("payment:required",()=>{}),
+      ws.on("subscription:payment-required",d=>{issue_(d.message||"All plans are free. Try selecting the plan again.","warn")}),
       ws.on("image:generated",d=>{
         const mediaUrl = resolveMediaUrl(d?.url);
         if(!mediaUrl){
@@ -448,7 +445,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
         }
         lg_("⚙️ Config synced","o");
       }),
-      ws.on("subscription:updated",d=>{setSubscription(s=>({...s,plan:d.plan,limits:d.limits||s.limits}));if(d.schedule){setSched(s=>({...s,postsPerHour:d.schedule.postsPerHour,maxPostsPerDay:d.schedule.maxPostsPerDay||s.maxPostsPerDay,autoImage:!!d.schedule.autoImage}))}setPendingPlan("");setSubTxSig("");lg_(`💳 Plan: ${d.plan}`,"o")}),
+      ws.on("subscription:updated",d=>{setSubscription(s=>({...s,plan:d.plan,limits:d.limits||s.limits}));if(d.schedule){setSched(s=>({...s,postsPerHour:d.schedule.postsPerHour,maxPostsPerDay:d.schedule.maxPostsPerDay||s.maxPostsPerDay,autoImage:!!d.schedule.autoImage}))}lg_(`💳 Plan: ${d.plan}`,"o")}),
     ];
     return ()=>u.forEach(fn=>fn?.());
   },[ws.on]);
@@ -508,58 +505,9 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
     if(!sendOrWarn("account:add",{name:nAc.nm,handle:nAc.hd,apiKey:nAc.ak,apiSecret:nAc.as,accessToken:nAc.at,accessTokenSecret:nAc.ats,bearerToken:nAc.bt}))return;
     lg_(`➕ ${nAc.nm}`,"o");sNAc({nm:"",hd:"",ak:"",as:"",at:"",ats:"",bt:""});sSAA(false)};
 
-  const verifyPayment=async()=>{
-    if(isAdmin){
-      setBilling((prev)=>({...prev,paidOnce:true,firstPaymentRequired:false,txSignature:"admin-bypass",isAdmin:true}));
-      return;
-    }
-    if(!txSig.trim()) return;
-    try{
-      const r = await authFetch(`/api/billing/verify-first-payment`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({txSignature:txSig.trim()})});
-      const d = await r.json();
-      if(!r.ok){
-        issue_(d.error||"Payment verification failed","warn");
-        return;
-      }
-      setBilling((prev)=>({...prev,paidOnce:true,firstPaymentRequired:false,txSignature:d.txSignature}));
-      setTxSig("");
-      issue_("Payment verified. First account unlocked. Future account additions are free.","warn");
-    }catch(e){
-      issue_(String(e),"warn");
-    }
-  };
-
   const pickPlan=(plan)=>{
     if(plan===subscription.plan) return;
-    if(plan==="free"||isAdmin){
-      sendOrWarn("subscription:update",{plan});
-      return;
-    }
-    setPendingPlan(plan);
-    issue_(`Pay ${subscription.pricingSol?.[plan]||0} SOL for ${plan} and verify the transaction below.`,"warn");
-  };
-
-  const verifySubscriptionPayment=async()=>{
-    if(isAdmin){
-      if(pendingPlan){
-        sendOrWarn("subscription:update",{plan:pendingPlan});
-      }
-      return;
-    }
-    if(!pendingPlan||!subTxSig.trim()) return;
-    try{
-      const r = await authFetch(`/api/billing/verify-subscription-payment`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan:pendingPlan,txSignature:subTxSig.trim()})});
-      const d = await r.json();
-      if(!r.ok){
-        issue_(d.error||"Subscription payment verification failed","warn");
-        return;
-      }
-      sendOrWarn("subscription:update",{plan:pendingPlan});
-      setSubscription(s=>({...s,paidPlans:{...(s.paidPlans||{}),[pendingPlan]:d.txSignature||"verified"}}));
-      setSubTxSig("");
-    }catch(e){
-      issue_(String(e),"warn");
-    }
+    sendOrWarn("subscription:update",{plan});
   };
 
   const rmAc=(a)=>{
@@ -678,14 +626,7 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
 
         {tab==="accounts"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Cd ti="👤 ACCOUNTS">{ac.map(a=>{const A=normAc(a);return <div key={A.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:7,background:A.on?X.ag:X.b,border:`1px solid ${A.on?X.a+"55":X.bd}`,marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:40,height:40,borderRadius:"50%",background:A.on?`linear-gradient(135deg,${X.a},${X.as})`:X.s,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:`2px solid ${A.on?X.a:X.bd}`}}>{A.av}</div><div><div style={{fontSize:13,fontWeight:700}}>{A.nm||"Unnamed account"}</div><div style={{fontSize:10,color:X.d}}>{A.hd||"@unknown"}</div></div>{A.on&&<Tg c={X.g} bg={X.gd}>ACTIVE</Tg>}</div><div style={{display:"flex",gap:5}}>{!A.on&&<Bt on={()=>swAc(A)} c={X.a} sm>Switch</Bt>}<button onClick={()=>rmAc(A)} style={{padding:"4px 8px",borderRadius:3,border:`1px solid ${X.r}44`,background:X.rd,color:X.r,fontSize:8,cursor:"pointer",fontWeight:700}}>Remove</button></div></div>})}
-          {billing.firstPaymentRequired&&!isAdmin&&<div style={{marginTop:8,padding:12,borderRadius:6,background:X.yd,border:`1px solid ${X.y}66`,color:X.y}}>
-            <div style={{fontSize:10,fontWeight:800,marginBottom:4}}>One-time setup payment required</div>
-            <div style={{fontSize:9,lineHeight:1.6}}>Pay <b>{billing.amountSol} SOL</b> to <b>{billing.feeWallet}</b>. This is one-time only. Future account additions are free, and the fee is used for hosting your agent.</div>
-            <div style={{display:"flex",gap:6,marginTop:8}}>
-              <input value={txSig} onChange={e=>setTxSig(e.target.value)} placeholder="Paste SOL transaction signature" style={{...IS,flex:1}}/>
-              <Bt on={verifyPayment} c={X.y} sm>Verify</Bt>
-            </div>
-          </div>}
+
           </Cd>
           {!sAA?<div onClick={()=>sSAA(true)} style={{padding:12,borderRadius:7,border:`1px dashed ${X.bd}`,textAlign:"center",color:X.d,fontSize:11,cursor:"pointer"}}>+ Add Agent Account</div>
           :<Cd ti="➕ NEW ACCOUNT"><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8}}>
@@ -704,15 +645,9 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
             <div style={{marginBottom:14,padding:10,borderRadius:5,background:X.b,border:`1px solid ${X.bd}`}}>
               <div style={{fontSize:8,color:X.d,marginBottom:6,letterSpacing:1.2}}>SUBSCRIPTION PLAN</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["free","starter","influencer","celebrity"].map((plan)=><button key={plan} onClick={()=>pickPlan(plan)} style={{padding:"5px 10px",borderRadius:4,border:`1px solid ${subscription.plan===plan?X.a:X.bd}`,background:subscription.plan===plan?X.ag:"transparent",color:subscription.plan===plan?X.a:X.d,fontFamily:"inherit",fontSize:9,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>{plan}</button>)}</div>
-              <div style={{fontSize:8,color:X.d,marginTop:6}}>Pricing: Free 0 SOL · Starter {subscription.pricingSol?.starter ?? 0.3} SOL · Influencer {subscription.pricingSol?.influencer ?? 0.5} SOL · Celebrity {subscription.pricingSol?.celebrity ?? 1} SOL</div>
+              <div style={{fontSize:8,color:X.d,marginTop:6}}>Pricing: Free 0 SOL · Starter {subscription.pricingSol?.starter ?? 0} SOL · Influencer {subscription.pricingSol?.influencer ?? 0} SOL · Celebrity {subscription.pricingSol?.celebrity ?? 0} SOL</div>
               <div style={{fontSize:8,color:X.d,marginTop:6}}>Limits: {subscription.limits.maxPostsPerHour}/hr, {subscription.limits.maxPostsPerDay}/day</div>
-              {!!pendingPlan&&pendingPlan!=="free"&&!isAdmin&&<div style={{marginTop:8,padding:8,borderRadius:5,background:X.yd,border:`1px solid ${X.y}66`,color:X.y}}>
-                <div style={{fontSize:8,marginBottom:5}}>Pending upgrade: <b>{pendingPlan}</b> ({subscription.pricingSol?.[pendingPlan]||0} SOL)</div>
-                <div style={{display:"flex",gap:6}}>
-                  <input value={subTxSig} onChange={e=>setSubTxSig(e.target.value)} placeholder="Paste subscription payment tx signature" style={{...IS,flex:1}}/>
-                  <Bt on={verifySubscriptionPayment} c={X.y} sm>Verify & Apply</Bt>
-                </div>
-              </div>}
+
             </div>
             <div style={{marginBottom:16}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:9,color:X.d,letterSpacing:1}}>POSTS PER HOUR</span><span style={{fontSize:18,fontWeight:800,color:X.a}}>{sched.postsPerHour}</span></div>

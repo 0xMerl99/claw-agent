@@ -37,7 +37,8 @@ export interface AgentConfig {
     };
     image?: {
         provider: 'openai' | 'stability' | 'replicate';
-        apiKey: string;
+        apiKey?: string;
+        keys?: Partial<Record<'openai' | 'stability' | 'replicate', string>>;
     };
 }
 export interface PersonalityProfile {
