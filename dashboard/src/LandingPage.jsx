@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const CONTRACT_ADDRESS = 'EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2';
+const CONTRACT_ADDRESS = 'So11111111111111111111111111111111111111112';
 
 export default function LandingPage() {
   const [copied, setCopied] = useState(false);
@@ -40,8 +40,8 @@ export default function LandingPage() {
         <div style={{ display: 'flex', gap: 10, marginBottom: 26, flexWrap: 'wrap' }}>
           <a href="/dashboard" style={{ padding: '11px 18px', borderRadius: 8, background: '#ff3d00', color: '#fff', textDecoration: 'none', fontWeight: 800 }}>Open Dashboard</a>
           <a href="/docs" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#c2c5dd', textDecoration: 'none', fontWeight: 700 }}>Read Docs</a>
-          <a href="https://x.com" target="_blank" rel="noreferrer" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#9aa0bb', textDecoration: 'none', fontWeight: 700 }}>X.com</a>
-          <a href="https://github.com" target="_blank" rel="noreferrer" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#9aa0bb', textDecoration: 'none', fontWeight: 700 }}>GitHub</a>
+          <a href="https://x.com/clawchi_sol" target="_blank" rel="noreferrer" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#9aa0bb', textDecoration: 'none', fontWeight: 700 }}>X.com</a>
+          <a href="https://github.com/0xMerl99/claw-agent" target="_blank" rel="noreferrer" style={{ padding: '11px 18px', borderRadius: 8, border: '1px solid #1c1e30', color: '#9aa0bb', textDecoration: 'none', fontWeight: 700 }}>GitHub</a>
         </div>
 
         <div style={{ marginBottom: 14, padding: 18, borderRadius: 10, border: '1px solid #1c1e30', background: '#0f1119' }}>

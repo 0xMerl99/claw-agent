@@ -23,7 +23,7 @@ const X = { ...DARK_THEME };
 const ST = ["market-alpha","meme-post","engage-reply","shill","on-chain"];
 const SC = ["#ff3d00","#00e5ff","#d500f9","#ffd600","#00e676"];
 const IS = {width:"100%",padding:"8px 10px",borderRadius:4,background:X.b,border:`1px solid ${X.bd}`,color:X.t,fontFamily:"inherit",fontSize:11,outline:"none",boxSizing:"border-box"};
-const CONTRACT_ADDRESS = "EU63MVAPZDYm82q5GP9rLRFii2zEpb1pWzUVDpt32Eo2";
+const CONTRACT_ADDRESS = "So11111111111111111111111111111111111111112";
 
 const maskApiKey=(value="")=>{
   const v = String(value||"").trim();
@@ -848,9 +848,9 @@ export default function ClawDashboard({ token, wallet, onLogout, adminMode, onCo
       <footer style={{position:"fixed",left:0,right:0,bottom:0,zIndex:80,background:`${X.b}f2`,borderTop:`1px solid ${X.bd}`,backdropFilter:"blur(12px)"}}>
         <div style={{maxWidth:1840,margin:"0 auto",padding:isMobile?"8px 12px":"9px 20px",display:"flex",alignItems:isMobile?"flex-start":"center",justifyContent:"space-between",flexDirection:isMobile?"column":"row",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:10,color:X.d}}>
-            <a href="https://x.com" target="_blank" rel="noreferrer" style={{color:X.c,textDecoration:"none",fontWeight:700}}>X.com</a>
+            <a href="https://x.com/clawchi_sol" target="_blank" rel="noreferrer" style={{color:X.c,textDecoration:"none",fontWeight:700}}>X.com</a>
             <span style={{opacity:.6}}>•</span>
-            <a href="https://github.com" target="_blank" rel="noreferrer" style={{color:X.c,textDecoration:"none",fontWeight:700}}>GitHub</a>
+            <a href="https://github.com/0xMerl99/claw-agent" target="_blank" rel="noreferrer" style={{color:X.c,textDecoration:"none",fontWeight:700}}>GitHub</a>
             <span style={{opacity:.6}}>•</span>
             <span style={{color:X.t,fontWeight:700}}>SOL ${solPrice!==null?solPrice.toFixed(2):"--"}</span>
           </div>
